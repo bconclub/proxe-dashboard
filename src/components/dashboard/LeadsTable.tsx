@@ -96,11 +96,11 @@ export default function LeadsTable({ limit, sourceFilter: initialSourceFilter }:
   }
 
   if (loading) {
-    return <div className="text-center py-8">Loading leads...</div>
+    return <div className="text-center py-8 text-gray-900 dark:text-gray-100">Loading leads...</div>
   }
 
   if (error) {
-    return <div className="text-center py-8 text-red-600">Error: {error}</div>
+    return <div className="text-center py-8 text-red-600 dark:text-red-400">Error: {error}</div>
   }
 
   return (
@@ -110,7 +110,7 @@ export default function LeadsTable({ limit, sourceFilter: initialSourceFilter }:
         <select
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+          className="px-3 py-2 border border-gray-300 dark:border-[#262626] bg-white dark:bg-[#0D0D0D] text-gray-900 dark:text-white rounded-md text-sm"
         >
           <option value="all">All Dates</option>
           <option value="today">Today</option>
@@ -122,7 +122,7 @@ export default function LeadsTable({ limit, sourceFilter: initialSourceFilter }:
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="px-3 py-2 border border-gray-300 dark:border-[#262626] bg-white dark:bg-[#0D0D0D] text-gray-900 dark:text-white rounded-md text-sm"
           >
             <option value="all">All Sources</option>
             <option value="web">Web</option>
@@ -135,7 +135,7 @@ export default function LeadsTable({ limit, sourceFilter: initialSourceFilter }:
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+          className="px-3 py-2 border border-gray-300 dark:border-[#262626] bg-white dark:bg-[#0D0D0D] text-gray-900 dark:text-white rounded-md text-sm"
         >
           <option value="all">All Statuses</option>
           <option value="new">New</option>
@@ -146,7 +146,10 @@ export default function LeadsTable({ limit, sourceFilter: initialSourceFilter }:
 
         <button
           onClick={exportToCSV}
-          className="ml-auto px-4 py-2 bg-primary-600 text-white rounded-md text-sm hover:bg-primary-700"
+          className="ml-auto px-4 py-2 text-white rounded-md text-sm transition-colors"
+          style={{ backgroundColor: '#5B1A8C' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4a1573'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#5B1A8C'}
         >
           Export CSV
         </button>
@@ -154,58 +157,58 @@ export default function LeadsTable({ limit, sourceFilter: initialSourceFilter }:
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-[#262626]">
+          <thead className="bg-gray-50 dark:bg-[#0D0D0D]">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Name
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Email
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Phone
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Source
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Timestamp
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Status
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-[#1A1A1A] divide-y divide-gray-200 dark:divide-[#262626]">
             {filteredLeads.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
                   No leads found
                 </td>
               </tr>
             ) : (
               filteredLeads.map((lead) => (
-                <tr key={lead.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                <tr key={lead.id} className="hover:bg-gray-50 dark:hover:bg-[#262626]">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                     {lead.name || '-'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {lead.email || '-'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {lead.phone || '-'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200">
                       {lead.source || 'unknown'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {formatDateTime(lead.timestamp)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
                       {lead.status || 'new'}
                     </span>
                   </td>

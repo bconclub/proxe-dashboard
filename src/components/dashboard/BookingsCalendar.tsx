@@ -61,41 +61,41 @@ export default function BookingsCalendar({ view = 'full' }: BookingsCalendarProp
     <div>
       {view === 'full' && (
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Select Date
           </label>
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="px-3 py-2 border border-gray-300 dark:border-[#262626] bg-white dark:bg-[#0D0D0D] text-gray-900 dark:text-white rounded-md text-sm"
           />
         </div>
       )}
 
       {view === 'upcoming' && (
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
           Next 10 Upcoming Bookings
         </h3>
       )}
 
       <div className="space-y-4">
         {filteredBookings.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             No bookings found
           </div>
         ) : (
           filteredBookings.map((booking) => (
             <div
               key={booking.id}
-              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+              className="border border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1A1A1A] rounded-lg p-4 hover:shadow-md transition-shadow"
             >
               <div className="flex justify-between items-start">
                 <div>
-                  <h4 className="text-lg font-medium text-gray-900">
+                  <h4 className="text-lg font-medium text-gray-900 dark:text-white">
                     {booking.name || 'Unnamed Lead'}
                   </h4>
-                  <div className="mt-2 space-y-1 text-sm text-gray-600">
+                  <div className="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-400">
                     {booking.email && <div>Email: {booking.email}</div>}
                     {booking.phone && <div>Phone: {booking.phone}</div>}
                     <div>
@@ -107,7 +107,7 @@ export default function BookingsCalendar({ view = 'full' }: BookingsCalendarProp
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
                     {booking.source || 'unknown'}
                   </span>
                 </div>

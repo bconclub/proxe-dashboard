@@ -26,6 +26,11 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+/* Light mode background */
+body:not(.dark) {
+  background: #f6f6f6;
+}
+
 .dark body {
   background: #0D0D0D;
   color: #ffffff;

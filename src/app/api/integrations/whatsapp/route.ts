@@ -12,19 +12,25 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const supabase = await createClient()
 
-    // Store WhatsApp lead in dashboard_leads table
+    // Generate external_session_id if not provided
+    const externalSessionId = body.external_session_id || body.whatsapp_id || `whatsapp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    // Store session in sessions table
     const { data, error } = await supabase
-      .from('dashboard_leads')
+      .from('sessions')
       .insert({
-        name: body.name,
+        external_session_id: externalSessionId,
+        user_name: body.name,
         email: body.email,
         phone: body.phone,
-        source: 'whatsapp',
-        status: 'new',
-        metadata: {
+        channel: 'whatsapp',
+        booking_status: body.booking_status || null,
+        booking_date: body.booking_date || null,
+        booking_time: body.booking_time || null,
+        channel_data: {
           whatsapp_id: body.whatsapp_id,
           message: body.message,
-          ...body.metadata,
+          ...(body.metadata || {}),
         },
       })
       .select()
@@ -32,7 +38,23 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, lead: data })
+    // Map session to lead format for backward compatibility
+    const lead = {
+      id: data.id,
+      name: data.user_name,
+      email: data.email,
+      phone: data.phone,
+      source: data.channel,
+      timestamp: data.created_at,
+      status: data.booking_status === 'confirmed' ? 'booked' : 
+              data.booking_status === 'pending' ? 'pending' :
+              data.booking_status === 'cancelled' ? 'cancelled' : null,
+      booking_date: data.booking_date,
+      booking_time: data.booking_time,
+      metadata: data.channel_data,
+    }
+
+    return NextResponse.json({ success: true, lead })
   } catch (error) {
     console.error('Error processing WhatsApp webhook:', error)
     return NextResponse.json(

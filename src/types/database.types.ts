@@ -102,86 +102,152 @@ export interface Database {
           created_at?: string
         }
       }
-      dashboard_leads: {
+      sessions: {
         Row: {
           id: string
-          name: string | null
+          external_session_id: string
+          user_name: string | null
           email: string | null
           phone: string | null
-          source: 'web' | 'whatsapp' | 'voice' | 'social'
-          created_at: string
-          status: string | null
+          website_url: string | null
+          conversation_summary: string | null
+          last_message_at: string | null
+          user_inputs_summary: Json
+          message_count: number
           booking_date: string | null
           booking_time: string | null
-          metadata: Json | null
-          chat_session_id: string | null
-          notes: string | null
+          booking_status: 'pending' | 'confirmed' | 'cancelled' | null
+          google_event_id: string | null
+          booking_created_at: string | null
+          brand: 'proxe' | 'windchasers'
+          channel: 'web' | 'whatsapp' | 'voice' | 'social'
+          channel_data: Json
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
-          name?: string | null
+          external_session_id: string
+          user_name?: string | null
           email?: string | null
           phone?: string | null
-          source: 'web' | 'whatsapp' | 'voice' | 'social'
-          created_at?: string
-          status?: string | null
+          website_url?: string | null
+          conversation_summary?: string | null
+          last_message_at?: string | null
+          user_inputs_summary?: Json
+          message_count?: number
           booking_date?: string | null
           booking_time?: string | null
-          metadata?: Json | null
-          chat_session_id?: string | null
-          notes?: string | null
+          booking_status?: 'pending' | 'confirmed' | 'cancelled' | null
+          google_event_id?: string | null
+          booking_created_at?: string | null
+          brand?: 'proxe' | 'windchasers'
+          channel: 'web' | 'whatsapp' | 'voice' | 'social'
+          channel_data?: Json
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
-          name?: string | null
+          external_session_id?: string
+          user_name?: string | null
           email?: string | null
           phone?: string | null
-          source?: 'web' | 'whatsapp' | 'voice' | 'social'
-          created_at?: string
-          status?: string | null
+          website_url?: string | null
+          conversation_summary?: string | null
+          last_message_at?: string | null
+          user_inputs_summary?: Json
+          message_count?: number
           booking_date?: string | null
           booking_time?: string | null
-          metadata?: Json | null
-          chat_session_id?: string | null
-          notes?: string | null
+          booking_status?: 'pending' | 'confirmed' | 'cancelled' | null
+          google_event_id?: string | null
+          booking_created_at?: string | null
+          brand?: 'proxe' | 'windchasers'
+          channel?: 'web' | 'whatsapp' | 'voice' | 'social'
+          channel_data?: Json
+          created_at?: string
+          updated_at?: string
         }
       }
-      chat_sessions: {
+      web_sessions: {
         Row: {
           id: string
-          name: string | null
-          email: string | null
-          phone: string | null
-          source_channel: string | null
+          session_id: string
           created_at: string
-          status: string | null
-          booking_date: string | null
-          booking_time: string | null
-          metadata: Json | null
+          updated_at: string
         }
         Insert: {
           id?: string
-          name?: string | null
-          email?: string | null
-          phone?: string | null
-          source_channel?: string | null
+          session_id: string
           created_at?: string
-          status?: string | null
-          booking_date?: string | null
-          booking_time?: string | null
-          metadata?: Json | null
+          updated_at?: string
         }
         Update: {
           id?: string
-          name?: string | null
-          email?: string | null
-          phone?: string | null
-          source_channel?: string | null
+          session_id?: string
           created_at?: string
-          status?: string | null
-          booking_date?: string | null
-          booking_time?: string | null
-          metadata?: Json | null
+          updated_at?: string
+        }
+      }
+      whatsapp_sessions: {
+        Row: {
+          id: string
+          session_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      voice_sessions: {
+        Row: {
+          id: string
+          session_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      social_sessions: {
+        Row: {
+          id: string
+          session_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          created_at?: string
+          updated_at?: string
         }
       }
       unified_leads: {

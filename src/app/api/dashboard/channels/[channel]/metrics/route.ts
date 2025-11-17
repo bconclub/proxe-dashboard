@@ -17,13 +17,50 @@ export async function GET(
 
     const channel = params.channel
 
-    // Get leads for this specific channel
-    const { data: leads, error: leadsError } = await supabase
-      .from('unified_leads')
-      .select('*')
-      .eq('source', channel)
+    // Validate channel
+    const validChannels = ['web', 'whatsapp', 'voice', 'social']
+    if (!validChannels.includes(channel)) {
+      return NextResponse.json(
+        { error: 'Invalid channel' },
+        { status: 400 }
+      )
+    }
 
-    if (leadsError) throw leadsError
+    // Get sessions for this specific channel from the sessions table
+    // Channel session tables (web_sessions, etc.) are JOIN tables that reference sessions
+    // We query sessions directly filtered by channel column
+    const { data: sessions, error: sessionsError } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('channel', channel)
+
+    if (sessionsError) throw sessionsError
+
+    // Map session data to unified_leads format
+    const leads = sessions?.map((session: any) => ({
+      id: session.id,
+      name: session.user_name || null,
+      email: session.email || null,
+      phone: session.phone || null,
+      source: channel,
+      timestamp: session.created_at || new Date().toISOString(),
+      status: session.booking_status === 'confirmed' ? 'booked' : 
+              session.booking_status === 'pending' ? 'pending' :
+              session.booking_status === 'cancelled' ? 'cancelled' : null,
+      booking_date: session.booking_date || null,
+      booking_time: session.booking_time || null,
+      metadata: {
+        conversation_summary: session.conversation_summary,
+        user_inputs_summary: session.user_inputs_summary,
+        message_count: session.message_count,
+        last_message_at: session.last_message_at,
+        google_event_id: session.google_event_id,
+        booking_created_at: session.booking_created_at,
+        brand: session.brand,
+        website_url: session.website_url,
+        channel_data: session.channel_data,
+      },
+    })) || []
 
     const now = new Date()
     const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000)

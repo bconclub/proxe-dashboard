@@ -16,12 +16,18 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
+import { 
+  MdMessage,
+  MdLocalFireDepartment,
+  MdAccessTime,
+  MdAnalytics,
+} from 'react-icons/md'
 
 interface ChannelMetricsProps {
   channel: 'web' | 'whatsapp' | 'voice' | 'social'
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042']
+const COLORS = ['#5B1A8C', '#00C49F', '#FFBB28', '#FF8042']
 
 export default function ChannelMetrics({ channel }: ChannelMetricsProps) {
   const [metrics, setMetrics] = useState({
@@ -54,7 +60,7 @@ export default function ChannelMetrics({ channel }: ChannelMetricsProps) {
   }, [channel])
 
   if (loading) {
-    return <div className="text-center py-8">Loading metrics...</div>
+    return <div className="text-center py-8 text-gray-900 dark:text-gray-100">Loading metrics...</div>
   }
 
   const channelNames = {
@@ -68,18 +74,18 @@ export default function ChannelMetrics({ channel }: ChannelMetricsProps) {
     <div className="space-y-6">
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#262626] overflow-hidden shadow rounded-lg">
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="text-2xl">💬</div>
+                <MdMessage className="w-8 h-8 text-gray-600 dark:text-gray-400" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
                     Total Conversations
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">
+                  <dd className="text-lg font-medium text-gray-900 dark:text-white">
                     {metrics.totalConversations}
                   </dd>
                 </dl>
@@ -88,18 +94,18 @@ export default function ChannelMetrics({ channel }: ChannelMetricsProps) {
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#262626] overflow-hidden shadow rounded-lg">
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="text-2xl">🔥</div>
+                <MdLocalFireDepartment className="w-8 h-8 text-gray-600 dark:text-gray-400" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
                     Active (24h)
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">
+                  <dd className="text-lg font-medium text-gray-900 dark:text-white">
                     {metrics.activeConversations}
                   </dd>
                 </dl>
@@ -108,18 +114,18 @@ export default function ChannelMetrics({ channel }: ChannelMetricsProps) {
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#262626] overflow-hidden shadow rounded-lg">
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="text-2xl">⏱️</div>
+                <MdAccessTime className="w-8 h-8 text-gray-600 dark:text-gray-400" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
                     Avg Response Time
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">
+                  <dd className="text-lg font-medium text-gray-900 dark:text-white">
                     {metrics.avgResponseTime}m
                   </dd>
                 </dl>
@@ -128,18 +134,18 @@ export default function ChannelMetrics({ channel }: ChannelMetricsProps) {
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#262626] overflow-hidden shadow rounded-lg">
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="text-2xl">📈</div>
+                <MdAnalytics className="w-8 h-8 text-gray-600 dark:text-gray-400" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
                     Conversion Rate
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">
+                  <dd className="text-lg font-medium text-gray-900 dark:text-white">
                     {metrics.conversionRate}%
                   </dd>
                 </dl>
@@ -152,8 +158,8 @@ export default function ChannelMetrics({ channel }: ChannelMetricsProps) {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Conversations Over Time */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
+        <div className="bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#262626] shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             {channelNames[channel]} Conversations Over Time
           </h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -166,7 +172,7 @@ export default function ChannelMetrics({ channel }: ChannelMetricsProps) {
               <Line
                 type="monotone"
                 dataKey="count"
-                stroke="#0088FE"
+                stroke="#5B1A8C"
                 name="Conversations"
               />
             </LineChart>
@@ -174,8 +180,8 @@ export default function ChannelMetrics({ channel }: ChannelMetricsProps) {
         </div>
 
         {/* Status Breakdown */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
+        <div className="bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#262626] shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             Leads by Status
           </h3>
           <ResponsiveContainer width="100%" height={300}>

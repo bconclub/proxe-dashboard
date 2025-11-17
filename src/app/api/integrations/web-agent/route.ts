@@ -58,24 +58,48 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    // Store lead in dashboard_leads table
+    // Generate external_session_id if not provided
+    const externalSessionId = body.external_session_id || body.chat_session_id || `web_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    // Store session in sessions table
     const { data, error } = await supabase
-      .from('dashboard_leads')
+      .from('sessions')
       .insert({
-        name: body.name,
+        external_session_id: externalSessionId,
+        user_name: body.name,
         email: body.email,
         phone: body.phone,
-        source: 'web',
-        status: 'new',
-        chat_session_id: body.chat_session_id || null,
-        metadata: body.metadata || {},
+        channel: 'web',
+        booking_status: body.booking_status || null,
+        booking_date: body.booking_date || null,
+        booking_time: body.booking_time || null,
+        channel_data: {
+          chat_session_id: body.chat_session_id || null,
+          ...(body.metadata || {}),
+        },
       })
       .select()
       .single()
 
     if (error) throw error
 
-    return NextResponse.json({ lead: data })
+    // Map session to lead format for backward compatibility
+    const lead = {
+      id: data.id,
+      name: data.user_name,
+      email: data.email,
+      phone: data.phone,
+      source: data.channel,
+      timestamp: data.created_at,
+      status: data.booking_status === 'confirmed' ? 'booked' : 
+              data.booking_status === 'pending' ? 'pending' :
+              data.booking_status === 'cancelled' ? 'cancelled' : null,
+      booking_date: data.booking_date,
+      booking_time: data.booking_time,
+      metadata: data.channel_data,
+    }
+
+    return NextResponse.json({ lead })
   } catch (error) {
     console.error('Error creating web agent lead:', error)
     return NextResponse.json(

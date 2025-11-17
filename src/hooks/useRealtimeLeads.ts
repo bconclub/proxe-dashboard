@@ -44,7 +44,7 @@ export function useRealtimeLeads() {
 
     fetchLeads()
 
-    // Subscribe to real-time changes from dashboard_leads
+    // Subscribe to real-time changes from sessions table (master table)
     const channel = supabase
       .channel('leads-changes')
       .on(
@@ -52,18 +52,36 @@ export function useRealtimeLeads() {
         {
           event: '*',
           schema: 'public',
-          table: 'dashboard_leads',
+          table: 'sessions',
         },
         (payload: RealtimePostgresChangesPayload<any>) => {
+          // Map session data to unified_leads format
+          const mapSessionToLead = (session: any) => ({
+            id: session.id,
+            name: session.user_name || null,
+            email: session.email || null,
+            phone: session.phone || null,
+            source: session.channel || 'web',
+            timestamp: session.created_at || new Date().toISOString(),
+            status: session.booking_status === 'confirmed' ? 'booked' : 
+                    session.booking_status === 'pending' ? 'pending' :
+                    session.booking_status === 'cancelled' ? 'cancelled' : null,
+            booking_date: session.booking_date || null,
+            booking_time: session.booking_time || null,
+          })
+
           if (payload.eventType === 'INSERT') {
-            const newLead = payload.new
-            if (newLead.name || newLead.email || newLead.phone) {
-              setLeads((prev) => [newLead, ...prev].slice(0, 1000))
+            const newSession = payload.new
+            const mappedLead = mapSessionToLead(newSession)
+            if (mappedLead.name || mappedLead.email || mappedLead.phone) {
+              setLeads((prev) => [mappedLead, ...prev].slice(0, 1000))
             }
           } else if (payload.eventType === 'UPDATE') {
+            const updatedSession = payload.new
+            const mappedLead = mapSessionToLead(updatedSession)
             setLeads((prev) =>
               prev.map((lead) =>
-                lead.id === payload.new.id ? payload.new : lead
+                lead.id === mappedLead.id ? mappedLead : lead
               )
             )
           } else if (payload.eventType === 'DELETE') {

@@ -74,7 +74,7 @@ export default function LoginPage() {
 
   return (
     <div className={`min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 ${
-      darkMode ? 'bg-[#0D0D0D]' : 'bg-gray-50'
+      darkMode ? 'bg-[#0D0D0D]' : 'bg-[#f6f6f6]'
     }`}>
       {/* Dark Mode Toggle */}
       <button
@@ -82,7 +82,7 @@ export default function LoginPage() {
         className={`fixed top-4 right-4 p-2 rounded-full transition-colors ${
           darkMode 
             ? 'bg-[#1A1A1A] text-white hover:bg-[#262626] border border-[#262626]' 
-            : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+            : 'bg-[#ececec] text-black hover:bg-[#d0d0d0]'
         }`}
         aria-label="Toggle dark mode"
       >
@@ -90,7 +90,7 @@ export default function LoginPage() {
       </button>
 
       <div className={`max-w-md w-full rounded-2xl shadow-xl p-8 ${
-        darkMode ? 'bg-[#1A1A1A] border border-[#262626]' : 'bg-white border border-gray-200'
+        darkMode ? 'bg-[#1A1A1A] border border-[#262626]' : 'bg-[#ffffff] border-2 border-[#d0d0d0]'
       }`}>
         <div className="space-y-8">
           {/* Logo and Title */}
@@ -126,7 +126,7 @@ export default function LoginPage() {
           {/* Error Message */}
           {error && (
             <div className={`rounded-lg p-4 border ${
-              darkMode ? 'bg-[#0D0D0D] border-[#262626]' : 'bg-gray-100 border-gray-300'
+              darkMode ? 'bg-[#0D0D0D] border-[#262626]' : 'bg-[#f6f6f6] border-[#d0d0d0]'
             }`}>
               <div className={`text-sm ${
                 darkMode ? 'text-gray-300' : 'text-gray-800'
@@ -152,7 +152,7 @@ export default function LoginPage() {
                 className={`w-full px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 transition-colors ${
                   darkMode
                     ? 'bg-[#0D0D0D] border-[#262626] text-white placeholder-gray-500 focus:ring-[#333333] focus:border-[#333333]'
-                    : 'bg-white border-gray-300 text-black placeholder-gray-500 focus:ring-gray-400 focus:border-gray-400'
+                    : 'bg-[#ffffff] border-[#d0d0d0] text-black placeholder-gray-500 focus:ring-[#d0d0d0] focus:border-[#d0d0d0]'
                 }`}
                 placeholder="demo@test.com"
                 value={email}
@@ -177,7 +177,7 @@ export default function LoginPage() {
                   className={`w-full px-4 py-3 pr-12 rounded-lg border focus:outline-none focus:ring-2 transition-colors ${
                     darkMode
                       ? 'bg-[#0D0D0D] border-[#262626] text-white placeholder-gray-500 focus:ring-[#333333] focus:border-[#333333]'
-                      : 'bg-white border-gray-300 text-black placeholder-gray-500 focus:ring-gray-400 focus:border-gray-400'
+                      : 'bg-[#ffffff] border-[#d0d0d0] text-black placeholder-gray-500 focus:ring-[#d0d0d0] focus:border-[#d0d0d0]'
                   }`}
                   placeholder="Enter your password"
                   value={password}
@@ -213,12 +213,12 @@ export default function LoginPage() {
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className={`w-full border-t ${
-                darkMode ? 'border-[#262626]' : 'border-gray-300'
+                darkMode ? 'border-[#262626]' : 'border-[#d0d0d0]'
               }`}></div>
             </div>
             <div className="relative flex justify-center text-sm">
               <span className={`px-2 ${
-                darkMode ? 'bg-[#1A1A1A] text-gray-500' : 'bg-white text-gray-500'
+                darkMode ? 'bg-[#1A1A1A] text-gray-500' : 'bg-[#ffffff] text-gray-500'
               }`}>
                 Or continue with
               </span>
@@ -231,7 +231,7 @@ export default function LoginPage() {
             className={`w-full py-3 px-4 rounded-lg border font-medium transition-colors flex items-center justify-center gap-3 ${
               darkMode
                 ? 'bg-[#0D0D0D] border-[#262626] text-white hover:bg-[#1A1A1A]'
-                : 'bg-white border-gray-300 text-black hover:bg-gray-50'
+                : 'bg-[#ffffff] border-[#d0d0d0] text-black hover:bg-[#f6f6f6]'
             }`}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
