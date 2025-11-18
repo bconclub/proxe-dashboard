@@ -44,11 +44,6 @@ jobs:
         script: |
           cd /var/www/dashboard
           npm install --production
-          # Create .env.local file with environment variables
-          cat > .env.local << EOF
-          NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-          EOF
+          # Preserve existing .env.local file - don't overwrite it
+          # The .env.local file should already exist on the VPS with the correct values
           pm2 restart dashboard || pm2 start npm --name dashboard -- start
