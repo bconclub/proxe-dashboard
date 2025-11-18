@@ -40,4 +40,8 @@ jobs:
         script: |
           cd /var/www/dashboard
           npm install --production
-          pm2 restart dashboard || pm2 start npm --name dashboard -- start
+          pm2 stop dashboard || true
+          pm2 delete dashboard || true
+          pm2 start npm --name dashboard -- start
+          pm2 save
+          pm2 logs dashboard --lines 20
