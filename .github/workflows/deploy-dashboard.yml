@@ -44,7 +44,7 @@ jobs:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_DEPLOY_KEY }}
-        source: ".next,package.json,package-lock.json,next.config.js,public,ecosystem.config.js"
+        source: ".next,package.json,package-lock.json,next.config.js,public"
         target: "/var/www/dashboard"
         
     - name: Restart Dashboard
@@ -56,28 +56,4 @@ jobs:
         script: |
           cd /var/www/dashboard
           npm install --production
-          # Verify .env.local exists and has required variables
-          if [ ! -f .env.local ]; then
-            echo "ERROR: .env.local file not found!"
-            exit 1
-          fi
-          # Check if NEXT_PUBLIC variables are in the file
-          if ! grep -q "NEXT_PUBLIC_SUPABASE_URL" .env.local; then
-            echo "WARNING: NEXT_PUBLIC_SUPABASE_URL not found in .env.local"
-          fi
-          # Stop existing PM2 process if running
-          pm2 stop dashboard || true
-          pm2 delete dashboard || true
-          # Create logs directory if it doesn't exist
-          mkdir -p logs
-          # Start PM2 using ecosystem config (which loads .env.local)
-          if [ -f ecosystem.config.js ]; then
-            pm2 start ecosystem.config.js
-          else
-            # Fallback: start directly with env file
-            export $(cat .env.local | xargs) && pm2 start npm --name dashboard -- start
-          fi
-          # Save PM2 configuration
-          pm2 save
-          # Show PM2 status
-          pm2 status
+          pm2 restart dashboard || pm2 start npm --name dashboard -- start
