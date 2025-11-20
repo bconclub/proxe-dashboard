@@ -72,7 +72,7 @@ export default function CalendarView({ bookings, onDateSelect }: CalendarViewPro
     )
   }
 
-  // Get bookings for a specific date and time slot
+  // Get bookings for a specific date and time slot (hour)
   const getBookingsForTimeSlot = (date: Date, hour: number) => {
     const dateBookings = getBookingsForDate(date)
     return dateBookings.filter((b) => {
@@ -82,15 +82,25 @@ export default function CalendarView({ bookings, onDateSelect }: CalendarViewPro
     })
   }
 
-  // Calculate position and height for booking block
-  const getBookingStyle = (booking: Booking) => {
+  // Calculate position and height for booking block within an hour slot
+  const getBookingStyle = (booking: Booking, hour: number) => {
     if (!booking.booking_time) return {}
-    const [hours, minutes] = booking.booking_time.split(':').map(Number)
-    const top = hours * 60 + minutes // Position in minutes from midnight
-    const height = 60 // Default 1 hour block
+    const [hours, minutes = 0] = booking.booking_time.split(':').map(Number)
+    
+    // Position within the hour slot (0-60 minutes)
+    // Each hour slot is 80px tall, so 1 minute = 80/60 = 1.33px
+    const minutesInHour = minutes
+    const topOffset = (minutesInHour / 60) * 80 // Position within the hour slot
+    
+    // Default height: 1 hour (80px), but can be adjusted
+    const height = 80 // 1 hour block
+    
     return {
-      top: `${(top / 60) * 80}px`, // 80px per hour
-      height: `${(height / 60) * 80}px`,
+      top: `${topOffset}px`,
+      height: `${height}px`,
+      position: 'absolute' as const,
+      left: '4px',
+      right: '4px',
     }
   }
 
@@ -341,27 +351,36 @@ export default function CalendarView({ bookings, onDateSelect }: CalendarViewPro
                             key={hour}
                             className="h-20 border-b border-gray-100 dark:border-[#262626] relative"
                           >
-                            {hourBookings.map((booking) => (
-                              <div
-                                key={booking.id}
-                                onClick={(e) => handleBookingClick(booking, e)}
-                                className={`
-                                  absolute left-1 right-1 rounded px-2 py-1 text-xs
-                                  ${getSourceColor(booking.source)}
-                                  text-white cursor-pointer hover:opacity-90 hover:shadow-lg
-                                  z-10 transition-all
-                                `}
-                                style={getBookingStyle(booking)}
-                                title={`${booking.name || 'Unnamed'} - ${booking.booking_time}`}
-                              >
-                                <div className="font-medium truncate">
-                                  {booking.name || 'Unnamed Lead'}
+                            {hourBookings.map((booking, idx) => {
+                              const style = getBookingStyle(booking, hour)
+                              // Handle overlapping bookings by offsetting horizontally
+                              const leftOffset = idx * 2 // Small offset for overlapping bookings
+                              return (
+                                <div
+                                  key={booking.id}
+                                  onClick={(e) => handleBookingClick(booking, e)}
+                                  className={`
+                                    rounded px-2 py-1 text-xs
+                                    ${getSourceColor(booking.source)}
+                                    text-white cursor-pointer hover:opacity-90 hover:shadow-lg
+                                    z-10 transition-all
+                                  `}
+                                  style={{
+                                    ...style,
+                                    left: `${4 + leftOffset}px`,
+                                    right: `${4 + leftOffset}px`,
+                                  }}
+                                  title={`${booking.name || 'Unnamed'} - ${booking.booking_time}`}
+                                >
+                                  <div className="font-medium truncate">
+                                    {booking.name || 'Unnamed Lead'}
+                                  </div>
+                                  <div className="text-xs opacity-90">
+                                    {booking.booking_time}
+                                  </div>
                                 </div>
-                                <div className="text-xs opacity-90">
-                                  {booking.booking_time}
-                                </div>
-                              </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         )
                       })}
