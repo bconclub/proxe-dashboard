@@ -11,27 +11,17 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
-        
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Build
-      run: npm run build
-      
-    - name: Deploy to VPS
+    - name: Deploy Source to VPS
       uses: appleboy/scp-action@master
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_DEPLOY_KEY }}
-        source: ".next,package.json,package-lock.json,next.config.js,public"
+        source: ".,!node_modules,!.git,!.next"
         target: "/var/www/dashboard"
+        strip_components: 1
         
-    - name: Restart Dashboard
+    - name: Build and Restart on VPS
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.VPS_HOST }}
@@ -39,13 +29,11 @@ jobs:
         key: ${{ secrets.VPS_DEPLOY_KEY }}
         script: |
           cd /var/www/dashboard
-          npm install --production
+          export NEXT_PUBLIC_SUPABASE_URL=https://zboanatspldypfrtrkfp.supabase.co
+          export NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpib2FuYXRzcGxkeXBmcnRya2ZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwOTU3MjgsImV4cCI6MjA3NTY3MTcyOH0.iQpWKmGAb7ELVXUNatcMTK2jprAxRSdkAVQdNMlzcZc
+          npm install
+          npm run build
           pm2 stop dashboard || true
           pm2 delete dashboard || true
-          PORT=3001 pm2 start npm --name dashboard -- start
+          PORT=3000 pm2 start npm --name dashboard -- start
           pm2 save
-          sleep 3
-          pm2 status
-          echo "Checking if app is listening on port 3001..."
-          netstat -tlnp | grep :3001 || ss -tlnp | grep :3001 || echo "Port 3001 not found - check PM2 logs"
-          pm2 logs dashboard --lines 30 --nostream
