@@ -62,7 +62,7 @@ export default function CalendarView({ bookings, onDateSelect }: CalendarViewPro
         }
       }
     }
-  }, [])
+  }, [viewMode])
 
   // Get bookings for a specific date
   const getBookingsForDate = (date: Date) => {
