@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, addWeeks, subWeeks } from 'date-fns'
 import { MdChevronLeft, MdChevronRight, MdViewWeek, MdViewModule, MdClose, MdPerson, MdEmail, MdPhone, MdCalendarToday, MdAccessTime } from 'react-icons/md'
+import LeadDetailsModal from './LeadDetailsModal'
+import type { Lead } from '@/types'
 
 interface Booking {
   id: string
@@ -44,6 +46,9 @@ export default function CalendarView({ bookings, onDateSelect }: CalendarViewPro
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false)
+  const [loadingLead, setLoadingLead] = useState(false)
 
   // Check for date query parameter on mount
   useEffect(() => {
@@ -144,10 +149,92 @@ export default function CalendarView({ bookings, onDateSelect }: CalendarViewPro
     setIsModalOpen(true)
   }
 
-  const handleViewClientDetails = () => {
-    if (selectedBooking) {
-      router.push(`/dashboard/leads?id=${selectedBooking.id}`)
-      setIsModalOpen(false)
+  const handleViewClientDetails = async () => {
+    if (!selectedBooking) return
+    
+    setIsModalOpen(false)
+    setLoadingLead(true)
+    
+    try {
+      // Fetch full lead details from unified_leads
+      const response = await fetch(`/api/dashboard/leads?limit=1000`)
+      if (!response.ok) throw new Error('Failed to fetch leads')
+      
+      const data = await response.json()
+      const lead = data.leads?.find((l: any) => l.id === selectedBooking.id)
+      
+      if (lead) {
+        // Convert to Lead type expected by LeadDetailsModal
+        const modalLead: Lead = {
+          id: lead.id,
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          source: lead.first_touchpoint || lead.last_touchpoint || lead.source || 'web',
+          timestamp: lead.timestamp || lead.last_interaction_at || new Date().toISOString(),
+          status: lead.status || null,
+          booking_date: lead.booking_date || selectedBooking.booking_date,
+          booking_time: lead.booking_time || selectedBooking.booking_time,
+          metadata: lead.metadata,
+        }
+        setSelectedLead(modalLead)
+        setIsLeadModalOpen(true)
+      } else {
+        // If not found in leads, create from booking data
+        const modalLead: Lead = {
+          id: selectedBooking.id,
+          name: selectedBooking.name,
+          email: selectedBooking.email,
+          phone: selectedBooking.phone,
+          source: selectedBooking.source || selectedBooking.first_touchpoint || selectedBooking.last_touchpoint || 'web',
+          timestamp: new Date().toISOString(),
+          status: null,
+          booking_date: selectedBooking.booking_date,
+          booking_time: selectedBooking.booking_time,
+          metadata: selectedBooking.metadata,
+        }
+        setSelectedLead(modalLead)
+        setIsLeadModalOpen(true)
+      }
+    } catch (error) {
+      console.error('Error fetching lead details:', error)
+      // Fallback: create lead from booking data
+      const modalLead: Lead = {
+        id: selectedBooking.id,
+        name: selectedBooking.name,
+        email: selectedBooking.email,
+        phone: selectedBooking.phone,
+        source: selectedBooking.source || selectedBooking.first_touchpoint || selectedBooking.last_touchpoint || 'web',
+        timestamp: new Date().toISOString(),
+        status: null,
+        booking_date: selectedBooking.booking_date,
+        booking_time: selectedBooking.booking_time,
+        metadata: selectedBooking.metadata,
+      }
+      setSelectedLead(modalLead)
+      setIsLeadModalOpen(true)
+    } finally {
+      setLoadingLead(false)
+    }
+  }
+
+  const handleUpdateLeadStatus = async (leadId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/dashboard/leads/${leadId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) throw new Error('Failed to update status')
+
+      // Update selected lead status
+      if (selectedLead && selectedLead.id === leadId) {
+        setSelectedLead({ ...selectedLead, status: newStatus || null })
+      }
+    } catch (err) {
+      console.error('Error updating lead status:', err)
+      throw err
     }
   }
 
