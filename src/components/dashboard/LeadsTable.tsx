@@ -141,7 +141,7 @@ export default function LeadsTable({ limit, sourceFilter: initialSourceFilter }:
       
       // Update selected lead if modal is open
       if (selectedLead && selectedLead.id === leadId) {
-        setSelectedLead({ ...selectedLead, status: newStatus })
+        setSelectedLead({ ...selectedLead, status: newStatus } as Lead)
       }
     } catch (err) {
       console.error('Error updating status:', err)
