@@ -64,8 +64,8 @@ export default function BookingsCalendar({ view = 'full' }: BookingsCalendarProp
   return (
     <div>
       <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-        Next 10 Upcoming Bookings
-      </h3>
+          Next 10 Upcoming Bookings
+        </h3>
 
       <div className="space-y-4">
         {upcomingBookings.length === 0 ? (
