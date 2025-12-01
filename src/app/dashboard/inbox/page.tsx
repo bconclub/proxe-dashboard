@@ -2,16 +2,38 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useSearchParams } from 'next/navigation'
 import { 
   MdInbox, 
-  MdLanguage, 
-  MdChat, 
-  MdPhone, 
-  MdShare, 
   MdSend, 
-  MdSearch 
+  MdSearch,
+  MdAutoAwesome
 } from 'react-icons/md'
 import LoadingOverlay from '@/components/dashboard/LoadingOverlay'
+import LeadDetailsModal from '@/components/dashboard/LeadDetailsModal'
+
+// Channel Icons using custom SVGs
+const ChannelIcon = ({ channel, size = 16, active = false }: { channel: string; size?: number; active?: boolean }) => {
+  const style = {
+    opacity: active ? 1 : 0.3,
+    filter: 'invert(1) brightness(2)', // Inverts black to white for dark mode
+  };
+  
+  switch (channel) {
+    case 'web':
+      return <img src="/browser-stroke-rounded.svg" alt="Web" width={size} height={size} style={style} title="Website" />;
+    case 'whatsapp':
+      return <img src="/whatsapp-business-stroke-rounded.svg" alt="WhatsApp" width={size} height={size} style={style} title="WhatsApp" />;
+    case 'voice':
+      return <img src="/ai-voice-stroke-rounded.svg" alt="Voice" width={size} height={size} style={style} title="Voice" />;
+    case 'social':
+      return <img src="/video-ai-stroke-rounded.svg" alt="Social" width={size} height={size} style={style} title="Social" />;
+    default:
+      return null;
+  }
+};
+
+const ALL_CHANNELS = ['web', 'whatsapp', 'voice', 'social'];
 
 // Types
 interface Conversation {
@@ -19,7 +41,7 @@ interface Conversation {
   lead_name: string
   lead_email: string
   lead_phone: string
-  channel: 'web' | 'whatsapp' | 'voice' | 'social'
+  channels: string[] // Array of all channels: ['web', 'whatsapp', 'voice', 'social']
   last_message: string
   last_message_at: string
   unread_count: number
@@ -38,6 +60,7 @@ interface Message {
 
 export default function InboxPage() {
   const supabase = createClient()
+  const searchParams = useSearchParams()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -45,6 +68,26 @@ export default function InboxPage() {
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [channelFilter, setChannelFilter] = useState<string>('all')
+  const [selectedChannel, setSelectedChannel] = useState<string>('')
+  const [selectedLead, setSelectedLead] = useState<any>(null)
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [conversationSummary, setConversationSummary] = useState<string | null>(null)
+  const [showSummary, setShowSummary] = useState(false)
+
+  // Handle URL parameters to open specific conversation
+  useEffect(() => {
+    const leadParam = searchParams.get('lead')
+    const channelParam = searchParams.get('channel')
+    
+    if (leadParam) {
+      setSelectedLeadId(leadParam)
+      if (channelParam) {
+        setSelectedChannel(channelParam)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   // Fetch conversations (grouped by lead_id)
   useEffect(() => {
@@ -52,13 +95,36 @@ export default function InboxPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelFilter])
 
-  // Fetch messages when conversation selected
+  // Set default channel when conversation is selected
   useEffect(() => {
-    if (selectedLeadId) {
+    if (selectedLeadId && !selectedChannel) {
+      const conversation = conversations.find(c => c.lead_id === selectedLeadId)
+      if (conversation && conversation.channels.length > 0) {
+        // Check if channel is specified in URL, otherwise use first channel
+        const channelParam = searchParams.get('channel')
+        if (channelParam && conversation.channels.includes(channelParam)) {
+          setSelectedChannel(channelParam)
+        } else {
+          setSelectedChannel(conversation.channels[0])
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLeadId, conversations, searchParams])
+
+  // Reset summary when changing conversations
+  useEffect(() => {
+    setConversationSummary(null)
+    setShowSummary(false)
+  }, [selectedLeadId])
+
+  // Fetch messages when conversation selected or channel changes
+  useEffect(() => {
+    if (selectedLeadId && selectedChannel) {
       fetchMessages(selectedLeadId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLeadId])
+  }, [selectedLeadId, selectedChannel])
 
   // Real-time subscription for new messages
   useEffect(() => {
@@ -115,23 +181,24 @@ export default function InboxPage() {
 
       console.log('Fetched messages:', messagesData.length)
 
-      // Group messages by lead_id - keep only the latest message per lead
+      // Group by lead_id and collect ALL channels per lead
       const conversationMap = new Map<string, any>()
-
+      
       for (const msg of messagesData) {
-        if (!msg.lead_id) continue
-
+        if (!msg.lead_id) continue;
+        
         if (!conversationMap.has(msg.lead_id)) {
           conversationMap.set(msg.lead_id, {
             lead_id: msg.lead_id,
-            channel: msg.channel,
+            channels: new Set([msg.channel]),
             last_message: msg.content || '(No content)',
             last_message_at: msg.created_at,
             message_count: 1
-          })
+          });
         } else {
-          // Increment message count for existing conversation
-          conversationMap.get(msg.lead_id).message_count++
+          const conv = conversationMap.get(msg.lead_id);
+          conv.channels.add(msg.channel);
+          conv.message_count++;
         }
       }
 
@@ -146,6 +213,8 @@ export default function InboxPage() {
         return
       }
 
+      console.log('Looking up lead IDs:', leadIds)
+
       const { data: leadsData, error: leadsError } = await supabase
         .from('all_leads')
         .select('id, customer_name, email, phone')
@@ -155,20 +224,23 @@ export default function InboxPage() {
         console.error('Error fetching leads:', leadsError)
       }
 
-      console.log('Fetched leads:', leadsData?.length)
+      console.log('Leads data returned:', leadsData)
 
       // Build final conversations array
       const conversationsArray: Conversation[] = []
 
       for (const [leadId, convData] of conversationMap) {
-        const lead = leadsData?.find((l: any) => l.id === leadId)
-
+        // Find matching lead - ensure we're comparing strings
+        const lead = leadsData?.find((l: any) => String(l.id) === String(leadId))
+        
+        console.log(`Lead ${leadId}:`, lead ? `Found - ${lead.customer_name}` : 'Not found')
+        
         conversationsArray.push({
           lead_id: leadId,
           lead_name: lead?.customer_name || 'Unknown',
           lead_email: lead?.email || '',
           lead_phone: lead?.phone || '',
-          channel: convData.channel,
+          channels: Array.from(convData.channels), // Convert Set to Array
           last_message: convData.last_message,
           last_message_at: convData.last_message_at,
           unread_count: 0
@@ -192,11 +264,18 @@ export default function InboxPage() {
   async function fetchMessages(leadId: string) {
     setMessagesLoading(true)
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('messages')
         .select('*')
         .eq('lead_id', leadId)
         .order('created_at', { ascending: true })
+      
+      // Filter by selected channel if one is selected
+      if (selectedChannel) {
+        query = query.eq('channel', selectedChannel)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       setMessages(data || [])
@@ -207,15 +286,113 @@ export default function InboxPage() {
     setMessagesLoading(false)
   }
 
-  // Channel icon helper
-  function getChannelIcon(channel: string) {
-    switch (channel) {
-      case 'web': return <span className="text-blue-500"><MdLanguage size={16} /></span>
-      case 'whatsapp': return <span className="text-green-500"><MdChat size={16} /></span>
-      case 'voice': return <span className="text-purple-500"><MdPhone size={16} /></span>
-      case 'social': return <span className="text-pink-500"><MdShare size={16} /></span>
-      default: return <MdInbox size={16} />
+  async function openLeadModal(leadId: string) {
+    try {
+      // Fetch from all_leads
+      const { data: lead, error } = await supabase
+        .from('all_leads')
+        .select('*')
+        .eq('id', leadId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching lead:', error);
+        return;
+      }
+      
+      // Fetch booking data from web_sessions (most recent booking)
+      const { data: webSession } = await supabase
+        .from('web_sessions')
+        .select('booking_date, booking_time, booking_status')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      // Also check unified_context for booking data
+      const bookingFromContext = lead.unified_context?.web?.booking_date || lead.unified_context?.whatsapp?.booking_date;
+      const bookingTimeFromContext = lead.unified_context?.web?.booking_time || lead.unified_context?.whatsapp?.booking_time;
+      
+      // Convert booking_time to string if it's a Time object
+      let bookingTime = null;
+      if (webSession?.booking_time) {
+        bookingTime = typeof webSession.booking_time === 'string' 
+          ? webSession.booking_time 
+          : String(webSession.booking_time);
+      } else if (bookingTimeFromContext) {
+        bookingTime = typeof bookingTimeFromContext === 'string'
+          ? bookingTimeFromContext
+          : String(bookingTimeFromContext);
+      }
+      
+      // Transform to match the Lead interface expected by LeadDetailsModal
+      const leadData = {
+        id: lead.id,
+        name: lead.customer_name || 'Unknown',
+        email: lead.email || '',
+        phone: lead.phone || '',
+        source: lead.first_touchpoint || lead.last_touchpoint || 'web',
+        first_touchpoint: lead.first_touchpoint || null,
+        last_touchpoint: lead.last_touchpoint || null,
+        timestamp: lead.created_at || lead.timestamp,
+        status: lead.status || webSession?.booking_status || 'New Lead',
+        booking_date: webSession?.booking_date || bookingFromContext || null,
+        booking_time: bookingTime,
+        unified_context: lead.unified_context || null,
+        metadata: lead.metadata || {}
+      };
+      
+      console.log('Lead modal data:', {
+        booking_date: leadData.booking_date,
+        booking_time: leadData.booking_time,
+        webSession,
+        unified_context: lead.unified_context
+      });
+      
+      setSelectedLead(leadData);
+      setIsLeadModalOpen(true);
+    } catch (err) {
+      console.error('Error opening lead modal:', err);
     }
+  }
+
+  async function summarizeConversation() {
+    if (!selectedLeadId || messages.length === 0) return;
+    
+    setSummaryLoading(true);
+    setShowSummary(true);
+    
+    try {
+      // Build conversation text from messages
+      const conversationText = messages
+        .map(msg => `${msg.sender === 'customer' ? selectedConversation?.lead_name || 'Customer' : 'PROXe'}: ${msg.content}`)
+        .join('\n');
+      
+      // Call Claude API to summarize (you can create a new API route or use existing)
+      const response = await fetch('/api/dashboard/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation: conversationText,
+          leadName: selectedConversation?.lead_name || 'Customer'
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setConversationSummary(data.summary);
+      } else {
+        // Fallback: Generate a basic summary from messages
+        const customerMessages = messages.filter(m => m.sender === 'customer').map(m => m.content);
+        const topics = customerMessages.slice(0, 3).join(', ');
+        setConversationSummary(`Customer discussed: ${topics.substring(0, 200)}...`);
+      }
+    } catch (err) {
+      console.error('Error summarizing:', err);
+      setConversationSummary('Unable to generate summary');
+    }
+    
+    setSummaryLoading(false);
   }
 
   // Time ago helper
@@ -327,7 +504,10 @@ export default function InboxPage() {
             filteredConversations.map((conv) => (
               <div
                 key={conv.lead_id}
-                onClick={() => setSelectedLeadId(conv.lead_id)}
+                onClick={() => {
+                  setSelectedLeadId(conv.lead_id);
+                  setSelectedChannel(conv.channels[0] || 'whatsapp'); // Default to first channel
+                }}
                 className="p-4 cursor-pointer border-b transition-colors"
                 style={{
                   background: selectedLeadId === conv.lead_id ? 'var(--bg-tertiary)' : 'transparent',
@@ -336,7 +516,6 @@ export default function InboxPage() {
               >
                 <div className="flex items-start justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    {getChannelIcon(conv.channel)}
                     <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>
                       {conv.lead_name || conv.lead_phone || 'Unknown'}
                     </span>
@@ -345,6 +524,19 @@ export default function InboxPage() {
                     {timeAgo(conv.last_message_at)}
                   </span>
                 </div>
+                
+                {/* Channel icons row */}
+                <div className="flex items-center gap-1 mb-2">
+                  {ALL_CHANNELS.map((ch) => (
+                    <ChannelIcon 
+                      key={ch} 
+                      channel={ch} 
+                      size={14} 
+                      active={conv.channels.includes(ch)} 
+                    />
+                  ))}
+                </div>
+                
                 <p 
                   className="text-sm truncate"
                   style={{ color: 'var(--text-secondary)' }}
@@ -370,23 +562,122 @@ export default function InboxPage() {
           </div>
         ) : (
           <>
-            {/* Conversation Header */}
+            {/* Conversation Header with Channel Tabs */}
             <div 
-              className="p-4 border-b flex items-center justify-between"
+              className="border-b"
               style={{ borderColor: 'var(--border-primary)' }}
             >
-              <div className="flex items-center gap-3">
-                {getChannelIcon(selectedConversation?.channel || 'web')}
+              {/* Lead Info - Clickable name */}
+              <div className="p-4 flex items-center justify-between">
                 <div>
-                  <h2 className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  <h2 
+                    className="font-semibold cursor-pointer hover:underline"
+                    style={{ color: 'var(--accent-primary)' }}
+                    onClick={() => openLeadModal(selectedLeadId!)}
+                    title="Click to view lead details"
+                  >
                     {selectedConversation?.lead_name || 'Unknown'}
                   </h2>
                   <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                    {selectedConversation?.lead_phone} • {selectedConversation?.channel}
+                    {selectedConversation?.lead_phone}
                   </p>
                 </div>
+                
+                <div className="flex items-center gap-2">
+                  {/* AI Summary Button */}
+                  <button
+                    onClick={summarizeConversation}
+                    disabled={summaryLoading || messages.length === 0}
+                    className="p-2 rounded-md transition-colors flex items-center gap-1"
+                    style={{
+                      background: showSummary ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                      color: showSummary ? 'white' : 'var(--text-secondary)',
+                      opacity: messages.length === 0 ? 0.5 : 1
+                    }}
+                    title="Generate AI Summary"
+                  >
+                    <MdAutoAwesome size={18} className={summaryLoading ? 'animate-spin' : ''} />
+                  </button>
+                  
+                  {/* View Details Button */}
+                  <button
+                    onClick={() => openLeadModal(selectedLeadId!)}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-secondary)'
+                    }}
+                  >
+                    View Details
+                  </button>
+                </div>
+              </div>
+              
+              {/* Channel Tabs - Only show channels this customer has used */}
+              <div className="flex items-center gap-1 px-4 pb-3">
+                {selectedConversation?.channels.map((ch) => (
+                  <button
+                    key={ch}
+                    onClick={() => setSelectedChannel(ch)}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2"
+                    style={{
+                      background: selectedChannel === ch ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                      color: selectedChannel === ch ? 'white' : 'var(--text-secondary)'
+                    }}
+                  >
+                    <ChannelIcon channel={ch} size={14} active={true} />
+                    <span className="capitalize">{ch}</span>
+                  </button>
+                ))}
               </div>
             </div>
+
+            {/* AI Summary Panel */}
+            {showSummary && (
+              <div 
+                className="mx-4 mb-4 p-4 rounded-lg border"
+                style={{ 
+                  background: 'var(--bg-tertiary)', 
+                  borderColor: 'var(--accent-primary)',
+                  borderWidth: '1px'
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <MdAutoAwesome size={16} style={{ color: 'var(--accent-primary)' }} />
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      AI Summary
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => setShowSummary(false)}
+                    className="text-xs"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+                
+                {summaryLoading ? (
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    Generating summary...
+                  </p>
+                ) : (
+                  <div 
+                    className="text-sm whitespace-pre-wrap"
+                    style={{ 
+                      color: 'var(--text-secondary)',
+                      lineHeight: '1.6'
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: conversationSummary
+                        ?.replace(/\*\*(.*?)\*\*/g, '<strong style="color: var(--text-primary); font-weight: 600;">$1</strong>')
+                        .replace(/\n/g, '<br />') || ''
+                    }}
+                  />
+                )}
+              </div>
+            )}
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -408,13 +699,22 @@ export default function InboxPage() {
                       className="max-w-[70%] rounded-lg px-4 py-2"
                       style={{
                         background: msg.sender === 'customer' ? 'var(--bg-tertiary)' : 'var(--accent-primary)',
-                        color: msg.sender === 'customer' ? 'var(--text-primary)' : 'white'
+                        color: 'var(--text-primary)'
                       }}
                     >
+                      {/* Message header - show sender name and channel */}
+                      <div className="flex items-center gap-2 mb-1">
+                        <ChannelIcon channel={msg.channel} size={12} active={true} />
+                        <span className="text-xs font-medium" style={{ color: msg.sender === 'customer' ? 'var(--text-secondary)' : 'rgba(255,255,255,0.8)' }}>
+                          {msg.sender === 'customer' ? selectedConversation?.lead_name || 'Customer' : 'PROXe'}
+                        </span>
+                      </div>
+                      
                       <p className="text-sm">{msg.content}</p>
+                      
                       <p 
                         className="text-xs mt-1 text-right"
-                        style={{ color: msg.sender === 'customer' ? 'var(--text-secondary)' : 'rgba(255,255,255,0.7)' }}
+                        style={{ color: msg.sender === 'customer' ? 'var(--text-muted)' : 'rgba(255,255,255,0.7)' }}
                       >
                         {formatTime(msg.created_at)}
                       </p>
@@ -452,6 +752,18 @@ export default function InboxPage() {
           </>
         )}
       </div>
+
+      {/* Lead Details Modal */}
+      {selectedLead && (
+        <LeadDetailsModal
+          lead={selectedLead}
+          isOpen={isLeadModalOpen}
+          onClose={() => {
+            setIsLeadModalOpen(false);
+            setSelectedLead(null);
+          }}
+        />
+      )}
     </div>
   )
 }

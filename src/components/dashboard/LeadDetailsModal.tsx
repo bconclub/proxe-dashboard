@@ -4,7 +4,81 @@ import { useState, useEffect } from 'react'
 import { formatDateTime, formatDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
-import { MdLanguage, MdChat, MdPhone, MdShare } from 'react-icons/md'
+import { MdLanguage, MdChat, MdPhone, MdShare, MdAutoAwesome, MdOpenInNew } from 'react-icons/md'
+import { useRouter } from 'next/navigation'
+
+// Helper functions for IST date/time formatting
+function formatDateIST(dateString: string | null | undefined): string {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  // Format: DD-MM-YYYY
+  const day = date.toLocaleDateString('en-GB', { 
+    day: '2-digit', 
+    month: '2-digit', 
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata'
+  }).replace(/\//g, '-');
+  return day;
+}
+
+function formatTimeIST(dateString: string | null | undefined): string {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  // Format: 11:28 PM (no seconds)
+  return date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata'
+  });
+}
+
+function formatDateTimeIST(dateString: string | null | undefined): string {
+  if (!dateString) return '-';
+  return `${formatDateIST(dateString)}, ${formatTimeIST(dateString)}`;
+}
+
+function formatBookingTime(timeString: string | null | undefined): string {
+  if (!timeString) return '';
+  
+  // Handle time string formats like "18:00:00" or "18:00"
+  const timeParts = timeString.toString().split(':');
+  if (timeParts.length < 2) return timeString.toString();
+  
+  const hours = parseInt(timeParts[0], 10);
+  const minutes = parseInt(timeParts[1], 10);
+  
+  if (isNaN(hours) || isNaN(minutes)) return timeString.toString();
+  
+  // Convert to 12-hour format
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hours12 = hours % 12 || 12;
+  const minutesStr = minutes.toString().padStart(2, '0');
+  
+  return `${hours12}:${minutesStr} ${period}`;
+}
+
+const ALL_CHANNELS = ['web', 'whatsapp', 'voice', 'social'];
+
+const ChannelIcon = ({ channel, size = 16, active = false }: { channel: string; size?: number; active?: boolean }) => {
+  const style = {
+    opacity: active ? 1 : 0.3,
+    filter: 'invert(1) brightness(2)',
+  };
+  
+  switch (channel) {
+    case 'web':
+      return <img src="/browser-stroke-rounded.svg" alt="Web" width={size} height={size} style={style} title="Website" />;
+    case 'whatsapp':
+      return <img src="/whatsapp-business-stroke-rounded.svg" alt="WhatsApp" width={size} height={size} style={style} title="WhatsApp" />;
+    case 'voice':
+      return <img src="/ai-voice-stroke-rounded.svg" alt="Voice" width={size} height={size} style={style} title="Voice" />;
+    case 'social':
+      return <img src="/video-ai-stroke-rounded.svg" alt="Social" width={size} height={size} style={style} title="Social" />;
+    default:
+      return null;
+  }
+};
 
 const STATUS_OPTIONS = [
   'New Lead',
@@ -35,6 +109,8 @@ interface Lead {
   email: string | null
   phone: string | null
   source: string | null
+  first_touchpoint?: string | null
+  last_touchpoint?: string | null
   timestamp: string
   status: string | null
   booking_date: string | null
@@ -84,6 +160,7 @@ const CHANNEL_CONFIG = {
 }
 
 export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate }: LeadDetailsModalProps) {
+  const router = useRouter()
   const [selectedStatus, setSelectedStatus] = useState<string>(lead?.status || 'New Lead')
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [channelSummaries, setChannelSummaries] = useState<ChannelSummary[]>([])
@@ -244,20 +321,6 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
     }
   }
 
-  const handleCall = () => {
-    if (lead.phone) {
-      window.location.href = `tel:${lead.phone}`
-    }
-  }
-
-  const handleWhatsApp = () => {
-    if (lead.phone) {
-      // Remove any non-digit characters for WhatsApp
-      const phoneNumber = lead.phone.replace(/\D/g, '')
-      // Open WhatsApp with the phone number
-      window.open(`https://wa.me/${phoneNumber}`, '_blank')
-    }
-  }
 
   const formatDateString = (dateString: string) => {
     if (!dateString) return ''
@@ -295,100 +358,120 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
 
           {/* Content */}
           <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
-            {/* Contact Information */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Contact Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Name</label>
-                  <p className="text-gray-900 dark:text-white">{lead.name || '-'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</label>
-                  <p className="text-gray-900 dark:text-white">{lead.email || '-'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</label>
-                  <p className="text-gray-900 dark:text-white">{lead.phone || '-'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Source</label>
-                  <p className="text-gray-900 dark:text-white capitalize">{lead.source || '-'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Date</label>
-                  <p className="text-gray-900 dark:text-white">{formatDateTime(lead.timestamp)}</p>
-                </div>
-                {lead.booking_date && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Booking</label>
-                    <p className="text-gray-900 dark:text-white">
-                      {lead.booking_date} {lead.booking_time ? `at ${lead.booking_time}` : ''}
-                    </p>
-                  </div>
-                )}
+            {/* SECTION 1: Contact Details */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Name</p>
+                <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{lead.name}</p>
+              </div>
+              <div>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Email</p>
+                <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{lead.email || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Phone</p>
+                <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{lead.phone || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Date</p>
+                <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {formatDateTimeIST(lead.timestamp)}
+                </p>
               </div>
             </div>
 
-            {/* Conversation History */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Conversation History</h3>
-              
-              {loadingSummaries ? (
-                <div className="text-center py-4 text-gray-500 dark:text-gray-400">Loading conversation history...</div>
-              ) : channelSummaries.length === 0 ? (
-                <div className="bg-gray-50 dark:bg-[#0D0D0D] rounded-lg p-4 text-center text-gray-500 dark:text-gray-400">
-                  No conversation history yet
+            {/* SECTION 2: Touchpoints + Channels Row */}
+            <div className="mb-6">
+              {/* First/Last Touchpoint and Booking */}
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>First Touchpoint</p>
+                  <p className="font-medium capitalize" style={{ color: 'var(--text-primary)' }}>
+                    {lead.first_touchpoint || lead.source || '-'}
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {channelSummaries.map((channelSummary) => {
-                    const config = CHANNEL_CONFIG[channelSummary.channel]
-                    const Icon = config.icon
+                <div>
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Last Touchpoint</p>
+                  <p className="font-medium capitalize" style={{ color: 'var(--text-primary)' }}>
+                    {lead.last_touchpoint || '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Booking</p>
+                  {lead.booking_date ? (
+                    <div>
+                      <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {formatDateIST(lead.booking_date)}, {formatBookingTime(lead.booking_time)}
+                      </p>
+                      <button
+                        onClick={() => {
+                          router.push(`/dashboard/bookings?date=${lead.booking_date}`);
+                          onClose();
+                        }}
+                        className="flex items-center gap-1 text-xs mt-1 hover:underline"
+                        style={{ color: 'var(--accent-primary)' }}
+                      >
+                        View Booking
+                        <MdOpenInNew size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="font-medium" style={{ color: 'var(--text-primary)' }}>None</p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Channels Row with View Conversations */}
+              <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'var(--bg-tertiary)' }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Channels:</span>
+                  {ALL_CHANNELS.map((ch) => {
+                    const hasChannel = 
+                      lead.first_touchpoint === ch || 
+                      lead.last_touchpoint === ch ||
+                      lead.unified_context?.[ch] ||
+                      (lead.metadata?.channels && lead.metadata.channels.includes(ch));
                     
                     return (
-                      <div
-                        key={channelSummary.channel}
-                        className="rounded-lg border-l-4 mb-3"
-                        style={{
-                          borderLeftColor: config.color,
-                          backgroundColor: 'var(--bg-tertiary)',
-                          padding: '12px',
-                          borderRadius: '8px',
-                        }}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-lg">{config.emoji}</span>
-                          <span className="font-semibold text-gray-900 dark:text-white">{config.name}</span>
-                        </div>
-                        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap mb-2">
-                          {channelSummary.summary}
-                        </p>
-                        {channelSummary.timestamp && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 italic">
-                            _{formatDateString(channelSummary.timestamp)}_
-                          </p>
-                        )}
-                      </div>
-                    )
+                      <ChannelIcon key={ch} channel={ch} size={20} active={hasChannel} />
+                    );
                   })}
                 </div>
-              )}
+                
+                {/* View Conversations Link */}
+                <button
+                  onClick={() => {
+                    router.push(`/dashboard/inbox?lead=${lead.id}`);
+                    onClose();
+                  }}
+                  className="flex items-center gap-1 text-xs font-medium hover:underline"
+                  style={{ color: 'var(--accent-primary)' }}
+                >
+                  View Conversations
+                  <MdOpenInNew size={12} />
+                </button>
+              </div>
             </div>
 
-            {/* Unified Summary */}
-            {unifiedSummary && (
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📋 Unified Summary</h3>
-                <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-4">
-                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{unifiedSummary}</p>
-                </div>
+            {/* SECTION 3: Unified Summary */}
+            {(lead.unified_context?.unified_summary || lead.unified_context?.web?.conversation_summary || lead.unified_context?.whatsapp?.conversation_summary) && (
+              <div className="mb-6 p-4 rounded-lg border" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--accent-primary)' }}>
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                  <MdAutoAwesome size={16} style={{ color: 'var(--accent-primary)' }} />
+                  Unified Summary
+                </h3>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  {lead.unified_context?.unified_summary || 
+                   lead.unified_context?.web?.conversation_summary ||
+                   lead.unified_context?.whatsapp?.conversation_summary ||
+                   'No summary available'}
+                </p>
               </div>
             )}
 
-            {/* Status Update */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Status</h3>
+            {/* SECTION 4: Status */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Status</h3>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
                   <select
@@ -419,34 +502,31 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* SECTION 5: Actions */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Actions</h3>
-              <div className="flex gap-4">
+              <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Actions</h3>
+              <div className="flex gap-3">
                 {lead.phone && (
-                  <>
-                    <button
-                      onClick={handleCall}
-                      className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                      </svg>
-                      Call {lead.phone}
-                    </button>
-                    <button
-                      onClick={handleWhatsApp}
-                      className="flex-1 px-6 py-3 bg-[#25D366] hover:bg-[#20BA5A] text-white rounded-md transition-colors flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-                      </svg>
-                      WhatsApp {lead.phone}
-                    </button>
-                  </>
+                  <a
+                    href={`tel:${lead.phone}`}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                    style={{ background: 'var(--accent-primary)', color: 'white' }}
+                  >
+                    <MdPhone size={18} />
+                    Call
+                  </a>
                 )}
-                {!lead.phone && (
-                  <p className="text-gray-500 dark:text-gray-400">No phone number available</p>
+                {lead.phone && (
+                  <a
+                    href={`https://wa.me/91${lead.phone.replace(/\D/g, '').slice(-10)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                    style={{ background: '#22C55E', color: 'white' }}
+                  >
+                    <img src="/whatsapp-business-stroke-rounded.svg" alt="WhatsApp" width={18} height={18} style={{ filter: 'invert(1)' }} />
+                    WhatsApp
+                  </a>
                 )}
               </div>
             </div>

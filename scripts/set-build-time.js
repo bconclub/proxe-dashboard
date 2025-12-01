@@ -47,3 +47,5 @@ fs.writeFileSync(envLocal, envContent)
 console.log(`✅ Build time set to: ${buildTime}`)
 console.log(`📝 Updated ${envLocal}`)
 
+
+

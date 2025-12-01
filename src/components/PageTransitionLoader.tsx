@@ -34,10 +34,14 @@ export default function PageTransitionLoader() {
       <div className="flex flex-col items-center">
         {/* PROXe Icon with Animation */}
         <div className="relative">
+          {/* Pulse effect with transparent accent color */}
           <div
-            className="absolute inset-0 rounded-full animate-ping opacity-20"
+            className="absolute inset-0 rounded-full animate-ping opacity-30"
             style={{
               backgroundColor: 'var(--accent-primary)',
+              width: '100px',
+              height: '100px',
+              margin: '-10px',
             }}
           />
           <div className="relative animate-pulse">
