@@ -13,6 +13,8 @@ export default function LoginPage() {
   const [darkMode, setDarkMode] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [lastAttemptTime, setLastAttemptTime] = useState<number | null>(null)
+  const [attemptCount, setAttemptCount] = useState(0)
 
   useEffect(() => {
     // Check system preference or saved preference
@@ -41,20 +43,49 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    
+    // Client-side rate limiting: prevent too many rapid attempts
+    const now = Date.now()
+    if (lastAttemptTime && now - lastAttemptTime < 2000) {
+      setError('Please wait a moment before trying again.')
+      return
+    }
+    
+    setLastAttemptTime(now)
     setLoading(true)
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      setError(error.message)
+      if (error) {
+        // Provide user-friendly error messages
+        let errorMessage = error.message
+        
+        if (error.message.includes('rate limit') || error.message.includes('too many')) {
+          errorMessage = 'Too many login attempts. Please wait a few minutes before trying again.'
+        } else if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'Invalid email or password. Please check your credentials and try again.'
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Please verify your email address before signing in.'
+        }
+        
+        setError(errorMessage)
+        setAttemptCount(prev => prev + 1)
+        setLoading(false)
+      } else {
+        // Reset attempt count on success
+        setAttemptCount(0)
+        setLastAttemptTime(null)
+        router.push('/dashboard')
+        router.refresh()
+      }
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again later.')
       setLoading(false)
-    } else {
-      router.push('/dashboard')
-      router.refresh()
     }
   }
 
@@ -119,11 +150,23 @@ export default function LoginPage() {
           {/* Error Message */}
           {error && (
             <div className={`rounded-lg p-4 border ${
-              darkMode ? 'bg-[#0D0D0D] border-[#262626]' : 'bg-[#f6f6f6] border-[#d0d0d0]'
+              darkMode 
+                ? 'bg-[#0D0D0D] border-red-500/50' 
+                : 'bg-red-50 border-red-200'
             }`}>
-              <div className={`text-sm ${
-                darkMode ? 'text-gray-300' : 'text-gray-800'
-              }`}>{error}</div>
+              <div className={`text-sm flex items-start gap-2 ${
+                darkMode ? 'text-red-400' : 'text-red-600'
+              }`}>
+                <span className="flex-shrink-0">⚠️</span>
+                <span>{error}</span>
+              </div>
+              {error.includes('wait') && (
+                <div className={`mt-2 text-xs ${
+                  darkMode ? 'text-gray-500' : 'text-gray-600'
+                }`}>
+                  Tip: Rate limits reset after a few minutes. You can also try signing in with Google.
+                </div>
+              )}
             </div>
           )}
 

@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [widgetStyle, setWidgetStyle] = useState<WidgetStyle>('searchbar');
   const [widgetStyleSaved, setWidgetStyleSaved] = useState(false);
+  const [widgetStyleError, setWidgetStyleError] = useState<string | null>(null);
   const [loadingWidgetStyle, setLoadingWidgetStyle] = useState(true);
 
   // Load saved theme on mount
@@ -32,7 +33,9 @@ export default function SettingsPage() {
   useEffect(() => {
     async function fetchWidgetStyle() {
       try {
-        const response = await fetch('/api/dashboard/settings/widget-style');
+        const response = await fetch('/api/dashboard/settings/widget-style', {
+          credentials: 'include',
+        });
         if (response.ok) {
           const data = await response.json();
           setWidgetStyle(data.style || 'searchbar');
@@ -67,13 +70,17 @@ export default function SettingsPage() {
 
   // Handle widget style selection
   async function handleWidgetStyleSelect(style: WidgetStyle) {
+    const previousStyle = widgetStyle;
     setWidgetStyle(style);
+    setWidgetStyleError(null);
+    
     try {
       const response = await fetch('/api/dashboard/settings/widget-style', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ style }),
       });
 
@@ -83,15 +90,26 @@ export default function SettingsPage() {
       } else {
         const error = await response.json();
         console.error('Error saving widget style:', error);
+        
+        // Show error message
+        if (response.status === 403) {
+          setWidgetStyleError('Admin access required to change widget style');
+        } else if (response.status === 401) {
+          setWidgetStyleError('Please log in to save settings');
+        } else {
+          setWidgetStyleError(error.error || 'Failed to save widget style');
+        }
+        
         // Revert on error
-        const currentStyle = widgetStyle;
-        setWidgetStyle(currentStyle);
+        setWidgetStyle(previousStyle);
+        setTimeout(() => setWidgetStyleError(null), 5000);
       }
     } catch (error) {
       console.error('Error saving widget style:', error);
+      setWidgetStyleError('Network error. Please try again.');
       // Revert on error
-      const currentStyle = widgetStyle;
-      setWidgetStyle(currentStyle);
+      setWidgetStyle(previousStyle);
+      setTimeout(() => setWidgetStyleError(null), 5000);
     }
   }
 
@@ -383,6 +401,20 @@ export default function SettingsPage() {
                 }}
               >
                 Widget style saved successfully!
+              </div>
+            )}
+
+            {/* Error Notification */}
+            {widgetStyleError && (
+              <div
+                className="mt-4 p-3 rounded-lg text-sm text-center"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  color: '#ef4444',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                }}
+              >
+                {widgetStyleError}
               </div>
             )}
           </div>
