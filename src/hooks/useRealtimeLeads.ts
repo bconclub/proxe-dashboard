@@ -20,6 +20,12 @@ interface Lead {
   status: string | null
   metadata?: any
   unified_context?: any
+  lead_score?: number | null
+  lead_stage?: string | null
+  sub_stage?: string | null
+  stage_override?: boolean | null
+  last_scored_at?: string | null
+  is_active_chat?: boolean | null
 }
 
 export function useRealtimeLeads() {

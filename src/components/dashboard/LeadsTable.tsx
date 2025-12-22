@@ -30,6 +30,29 @@ const getStatusColor = (status: string | null) => {
   return statusColors[status || 'New Lead'] || statusColors['New Lead']
 }
 
+const getStageColor = (stage: string | null) => {
+  const stageColors: Record<string, { bg: string; text: string }> = {
+    'New': { bg: 'bg-blue-100 dark:bg-blue-900', text: 'text-blue-800 dark:text-blue-200' },
+    'Engaged': { bg: 'bg-cyan-100 dark:bg-cyan-900', text: 'text-cyan-800 dark:text-cyan-200' },
+    'Qualified': { bg: 'bg-yellow-100 dark:bg-yellow-900', text: 'text-yellow-800 dark:text-yellow-200' },
+    'High Intent': { bg: 'bg-orange-100 dark:bg-orange-900', text: 'text-orange-800 dark:text-orange-200' },
+    'Booking Made': { bg: 'bg-green-100 dark:bg-green-900', text: 'text-green-800 dark:text-green-200' },
+    'Converted': { bg: 'bg-emerald-100 dark:bg-emerald-900', text: 'text-emerald-800 dark:text-emerald-200' },
+    'Closed Lost': { bg: 'bg-red-100 dark:bg-red-900', text: 'text-red-800 dark:text-red-200' },
+    'In Sequence': { bg: 'bg-purple-100 dark:bg-purple-900', text: 'text-purple-800 dark:text-purple-200' },
+    'Cold': { bg: 'bg-gray-100 dark:bg-gray-900', text: 'text-gray-800 dark:text-gray-200' },
+  }
+  return stageColors[stage || 'New'] || stageColors['New']
+}
+
+const getScoreColor = (score: number | null | undefined): string => {
+  if (score === null || score === undefined) return 'text-gray-500'
+  if (score >= 86) return 'text-green-600 dark:text-green-400'
+  if (score >= 61) return 'text-orange-600 dark:text-orange-400'
+  if (score >= 31) return 'text-yellow-600 dark:text-yellow-400'
+  return 'text-blue-600 dark:text-blue-400'
+}
+
 // Using Lead type from @/types to match LeadDetailsModal expectations
 // Extending it with additional properties from useRealtimeLeads
 type ExtendedLead = Lead & {
@@ -38,6 +61,10 @@ type ExtendedLead = Lead & {
   brand?: string | null
   last_interaction_at?: string | null
   unified_context?: any
+  lead_score?: number | null
+  lead_stage?: string | null
+  sub_stage?: string | null
+  stage_override?: boolean | null
 }
 
 interface LeadsTableProps {
@@ -316,6 +343,12 @@ export default function LeadsTable({
                 Phone
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Score
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Stage
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 First Source
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -329,7 +362,7 @@ export default function LeadsTable({
           <tbody className="bg-white dark:bg-[#1A1A1A] divide-y divide-gray-200 dark:divide-[#262626]">
             {filteredLeads.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan={8} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
                   No leads found
                 </td>
               </tr>
@@ -348,6 +381,28 @@ export default function LeadsTable({
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {lead.phone || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <span className={`font-semibold ${getScoreColor(lead.lead_score)}`}>
+                      {lead.lead_score !== null && lead.lead_score !== undefined ? lead.lead_score : '-'}
+                    </span>
+                    {lead.stage_override && (
+                      <span className="ml-1 text-xs text-gray-400" title="Manual override">🔒</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {lead.lead_stage ? (
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        getStageColor(lead.lead_stage).bg
+                      } ${getStageColor(lead.lead_stage).text}`}>
+                        {lead.lead_stage}
+                        {lead.sub_stage && (
+                          <span className="ml-1 text-xs opacity-75">({lead.sub_stage})</span>
+                        )}
+                      </span>
+                    ) : (
+                      '-'
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200">

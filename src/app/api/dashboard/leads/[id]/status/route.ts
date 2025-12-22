@@ -37,9 +37,9 @@ export async function PATCH(
       )
     }
 
-    // Update the status in sessions table
+    // Update the status in all_leads table
     const { data, error } = await supabase
-      .from('sessions')
+      .from('all_leads')
       .update({ status })
       .eq('id', leadId)
       .select()

@@ -15,6 +15,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [lastAttemptTime, setLastAttemptTime] = useState<number | null>(null)
   const [attemptCount, setAttemptCount] = useState(0)
+  const [rateLimited, setRateLimited] = useState(false)
+  const [rateLimitUntil, setRateLimitUntil] = useState<number | null>(null)
+  const [rateLimitCountdown, setRateLimitCountdown] = useState<number | null>(null)
 
   useEffect(() => {
     // Check system preference or saved preference
@@ -27,7 +30,48 @@ export default function LoginPage() {
     } else {
       document.documentElement.classList.remove('dark')
     }
+
+    // Check for saved rate limit state
+    const savedRateLimit = localStorage.getItem('rateLimitUntil')
+    if (savedRateLimit) {
+      const until = parseInt(savedRateLimit)
+      if (Date.now() < until) {
+        setRateLimited(true)
+        setRateLimitUntil(until)
+      } else {
+        localStorage.removeItem('rateLimitUntil')
+      }
+    }
+
+    // Don't auto-redirect on login page - let the user stay here
+    // This prevents redirect loops when cookies aren't synced yet
   }, [])
+
+  // Countdown timer for rate limit
+  useEffect(() => {
+    if (!rateLimitUntil) {
+      setRateLimitCountdown(null)
+      return
+    }
+
+    const updateCountdown = () => {
+      const now = Date.now()
+      const remaining = Math.max(0, rateLimitUntil - now)
+      
+      if (remaining > 0) {
+        setRateLimitCountdown(Math.ceil(remaining / 1000)) // seconds
+      } else {
+        setRateLimited(false)
+        setRateLimitUntil(null)
+        setRateLimitCountdown(null)
+        localStorage.removeItem('rateLimitUntil')
+      }
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+    return () => clearInterval(interval)
+  }, [rateLimitUntil])
 
   const toggleDarkMode = () => {
     const newMode = !darkMode
@@ -44,9 +88,23 @@ export default function LoginPage() {
     e.preventDefault()
     setError(null)
     
-    // Client-side rate limiting: prevent too many rapid attempts
+    // Check if we're still rate limited
     const now = Date.now()
-    if (lastAttemptTime && now - lastAttemptTime < 2000) {
+    if (rateLimitUntil && now < rateLimitUntil) {
+      const minutesLeft = Math.ceil((rateLimitUntil - now) / 60000)
+      setError(`Rate limited. Please wait ${minutesLeft} minute${minutesLeft > 1 ? 's' : ''} before trying again.`)
+      return
+    }
+    
+    // Reset rate limit if time has passed
+    if (rateLimitUntil && now >= rateLimitUntil) {
+      setRateLimited(false)
+      setRateLimitUntil(null)
+      setAttemptCount(0)
+    }
+    
+    // Client-side rate limiting: prevent too many rapid attempts
+    if (lastAttemptTime && now - lastAttemptTime < 3000) {
       setError('Please wait a moment before trying again.')
       return
     }
@@ -56,34 +114,155 @@ export default function LoginPage() {
 
     try {
       const supabase = createClient()
-      const { error } = await supabase.auth.signInWithPassword({
+      
+      // Log diagnostic info in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 Login attempt:', {
+          email,
+          supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...',
+          timestamp: new Date().toISOString(),
+        })
+      }
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
-        // Provide user-friendly error messages
-        let errorMessage = error.message
-        
-        if (error.message.includes('rate limit') || error.message.includes('too many')) {
-          errorMessage = 'Too many login attempts. Please wait a few minutes before trying again.'
+        // Log full error details for debugging
+        console.error('❌ Supabase Auth Error:', {
+          message: error.message,
+          status: (error as any).status,
+          name: error.name,
+          fullError: error,
+        })
+
+        // Check for rate limit errors (429 status)
+        const isRateLimit = 
+          error.message.includes('rate limit') || 
+          error.message.includes('too many') ||
+          error.message.includes('429') ||
+          (error as any).status === 429
+
+        if (isRateLimit) {
+          // Set rate limit for 10 minutes (Supabase rate limits usually reset after 5-10 minutes)
+          const limitUntil = now + 10 * 60 * 1000 // 10 minutes
+          setRateLimited(true)
+          setRateLimitUntil(limitUntil)
+          localStorage.setItem('rateLimitUntil', limitUntil.toString())
+          setError('Rate limited by Supabase. Please wait 10 minutes or use Google login.')
+          
+          // Disable form for 10 minutes
+          setTimeout(() => {
+            setRateLimited(false)
+            setRateLimitUntil(null)
+            setAttemptCount(0)
+            localStorage.removeItem('rateLimitUntil')
+          }, 10 * 60 * 1000)
         } else if (error.message.includes('Invalid login credentials')) {
-          errorMessage = 'Invalid email or password. Please check your credentials and try again.'
+          setError('Invalid email or password. Please check your credentials and try again.')
+          setAttemptCount(prev => {
+            const newCount = prev + 1
+            // After 3 failed attempts, suggest waiting
+            if (newCount >= 3) {
+              setError('Multiple failed attempts. Please wait a moment or try Google login.')
+              setLastAttemptTime(now + 10000) // Wait 10 seconds
+            }
+            return newCount
+          })
         } else if (error.message.includes('Email not confirmed')) {
-          errorMessage = 'Please verify your email address before signing in.'
+          setError('Please verify your email address before signing in.')
+        } else {
+          setError(error.message)
         }
         
-        setError(errorMessage)
-        setAttemptCount(prev => prev + 1)
         setLoading(false)
       } else {
-        // Reset attempt count on success
+        // Reset everything on success
         setAttemptCount(0)
         setLastAttemptTime(null)
-        router.push('/dashboard')
-        router.refresh()
+        setRateLimited(false)
+        setRateLimitUntil(null)
+        
+        // Verify session is available
+        if (data?.user && data?.session) {
+          console.log('✅ Login successful, user:', data.user.email)
+          console.log('✅ Session token available:', !!data.session.access_token)
+          
+          // Wait a moment to ensure session is fully established
+          // Then redirect with full page reload to trigger middleware
+          await new Promise(resolve => setTimeout(resolve, 300))
+          
+          // Verify session one more time before redirecting
+          const { data: sessionData } = await supabase.auth.getSession()
+          if (sessionData?.session) {
+            console.log('✅ Session confirmed, making authenticated request to set cookies...')
+            
+            // Send session to API to set cookies on server
+            try {
+              const syncResponse = await fetch('/api/auth/sync-session', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  access_token: sessionData.session.access_token,
+                  refresh_token: sessionData.session.refresh_token,
+                  expires_at: sessionData.session.expires_at,
+                  expires_in: sessionData.session.expires_in,
+                  token_type: sessionData.session.token_type,
+                  user: sessionData.session.user,
+                }),
+                credentials: 'include',
+              })
+              
+              const result = await syncResponse.json()
+              console.log('✅ Sync response:', result)
+              
+              if (syncResponse.ok) {
+                console.log('✅ Session synced to cookies, redirecting...')
+                // Wait a moment for cookies to be set
+                await new Promise(resolve => setTimeout(resolve, 200))
+                window.location.href = '/dashboard'
+              } else {
+                console.warn('⚠️ Sync failed:', result)
+                // Still redirect - client-side check will handle it
+                window.location.href = '/dashboard'
+              }
+            } catch (error) {
+              console.error('❌ Sync error:', error)
+              // Still redirect - client-side check will handle it
+              window.location.href = '/dashboard'
+            }
+          } else {
+            console.error('❌ Session lost after login')
+            setError('Session error. Please try logging in again.')
+            setLoading(false)
+          }
+        } else if (data?.user) {
+          // User exists but no session - wait and retry
+          console.warn('⚠️ User exists but session not immediately available, waiting...')
+          await new Promise(resolve => setTimeout(resolve, 500))
+          
+          const { data: retrySession } = await supabase.auth.getSession()
+          if (retrySession?.session) {
+            console.log('✅ Session available on retry, redirecting...')
+            router.push('/dashboard')
+            router.refresh()
+          } else {
+            console.error('❌ Session not available after retry')
+            setError('Session not available. Please try logging in again.')
+            setLoading(false)
+          }
+        } else {
+          console.error('❌ Login successful but user data not available')
+          setError('Login successful but user data not available. Please try again.')
+          setLoading(false)
+        }
       }
     } catch (err) {
+      console.error('Login error:', err)
       setError('An unexpected error occurred. Please try again later.')
       setLoading(false)
     }
@@ -147,28 +326,37 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className={`rounded-lg p-4 border ${
-              darkMode 
-                ? 'bg-[#0D0D0D] border-red-500/50' 
-                : 'bg-red-50 border-red-200'
-            }`}>
-              <div className={`text-sm flex items-start gap-2 ${
-                darkMode ? 'text-red-400' : 'text-red-600'
+            {/* Error Message */}
+            {error && (
+              <div className={`rounded-lg p-4 border ${
+                darkMode 
+                  ? 'bg-[#0D0D0D] border-red-500/50' 
+                  : 'bg-red-50 border-red-200'
               }`}>
-                <span className="flex-shrink-0">⚠️</span>
-                <span>{error}</span>
-              </div>
-              {error.includes('wait') && (
-                <div className={`mt-2 text-xs ${
-                  darkMode ? 'text-gray-500' : 'text-gray-600'
+                <div className={`text-sm flex items-start gap-2 ${
+                  darkMode ? 'text-red-400' : 'text-red-600'
                 }`}>
-                  Tip: Rate limits reset after a few minutes. You can also try signing in with Google.
+                  <span className="flex-shrink-0">⚠️</span>
+                  <div className="flex-1">
+                    <div>{error}</div>
+                    {rateLimited && rateLimitCountdown !== null && (
+                      <div className={`mt-2 text-xs font-medium ${
+                        darkMode ? 'text-red-300' : 'text-red-700'
+                      }`}>
+                        Time remaining: {Math.floor(rateLimitCountdown / 60)}:{(rateLimitCountdown % 60).toString().padStart(2, '0')}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+                {error.includes('wait') || error.includes('Rate limited') && (
+                  <div className={`mt-2 text-xs ${
+                    darkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                    💡 <strong>Tip:</strong> Use Google login below - it has separate rate limits and should work immediately.
+                  </div>
+                )}
+              </div>
+            )}
 
           {/* Login Form */}
           <form className="space-y-5" onSubmit={handleLogin}>
@@ -234,14 +422,18 @@ export default function LoginPage() {
             {/* Login Button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || rateLimited}
               className={`w-full py-3 px-4 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 ${
                 darkMode
                   ? 'bg-white text-black hover:bg-gray-100 focus:ring-gray-700'
                   : 'bg-black text-white hover:bg-gray-900 focus:ring-gray-400'
               }`}
             >
-              {loading ? 'Signing in...' : 'Log in'}
+              {rateLimited 
+                ? 'Rate Limited - Please Wait' 
+                : loading 
+                  ? 'Signing in...' 
+                  : 'Log in'}
             </button>
           </form>
 

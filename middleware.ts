@@ -2,6 +2,22 @@ import { type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
+  // Skip auth check for API routes to prevent loops
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return await updateSession(request)
+  }
+  
+  // Skip auth check for static assets
+  if (request.nextUrl.pathname.startsWith('/_next/') || 
+      request.nextUrl.pathname.startsWith('/favicon.ico')) {
+    return await updateSession(request)
+  }
+  
+  // Skip auth check for auth pages to prevent redirect loops
+  if (request.nextUrl.pathname.startsWith('/auth/')) {
+    return await updateSession(request)
+  }
+  
   return await updateSession(request)
 }
 

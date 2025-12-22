@@ -1,3 +1,16 @@
+export type LeadStage = 
+  | 'New'
+  | 'Engaged'
+  | 'Qualified'
+  | 'High Intent'
+  | 'Booking Made'
+  | 'Converted'
+  | 'Closed Lost'
+  | 'In Sequence'
+  | 'Cold'
+
+export type HighIntentSubStage = 'proposal' | 'negotiation' | 'on-hold'
+
 export interface Lead {
   id: string
   name: string | null
@@ -12,6 +25,13 @@ export interface Lead {
   booking_time: string | null
   metadata?: any
   unified_context?: any
+  // Lead scoring fields
+  lead_score?: number | null
+  lead_stage?: LeadStage | null
+  sub_stage?: string | null
+  stage_override?: boolean | null
+  last_scored_at?: string | null
+  is_active_chat?: boolean | null
 }
 
 export interface Booking {

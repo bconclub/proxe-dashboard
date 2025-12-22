@@ -1715,7 +1715,43 @@ CMD ["npm", "start"]
 - **Version**: 1.0.0
 - **Package Name**: `proxe-command-center`
 - **Build Status**: ✅ Production Ready
-- **Build Time Tracking**: `NEXT_PUBLIC_BUILD_TIME` environment variable (UTC ISO format)
+- **Build Time Tracking**: `NEXT_PUBLIC_BUILD_TIME` environment variable (UTC ISO format with milliseconds)
+- **Last Build**: 2025-12-22T08:24:18.041Z (UTC)
+- **Build Script**: Prebuild hook runs `scripts/set-build-time.js` to set build timestamp
+
+### Build Configuration
+
+#### Next.js Configuration
+- **Framework**: Next.js 14.2.18 (App Router)
+- **React Strict Mode**: Enabled
+- **Build Output**: `.next/` directory
+- **Standalone Mode**: Available (if configured)
+
+#### TypeScript Configuration
+- **Version**: 5.3.3
+- **Target**: ES2020
+- **Module**: ESNext
+- **Strict Mode**: Enabled
+- **Path Aliases**: `@/*` → `./src/*`
+- **Module Resolution**: Bundler (Next.js optimized)
+
+#### Build Process
+1. **Prebuild Step** (`npm run prebuild`):
+   - Executes `node scripts/set-build-time.js`
+   - Updates `.env.local` with `NEXT_PUBLIC_BUILD_TIME` (UTC ISO format)
+   - Format: `YYYY-MM-DDTHH:mm:ss.sssZ` (e.g., `2025-12-22T08:24:18.041Z`)
+
+2. **Build Step** (`npm run build`):
+   - Sets `NEXT_PUBLIC_BUILD_TIME` environment variable
+   - Runs `next build` for production compilation
+   - TypeScript type checking (strict mode)
+   - Next.js optimization and bundling
+   - Generates `.next/BUILD_ID` for build tracking
+
+3. **Build Verification**:
+   - Validates `.next` directory creation
+   - Checks `BUILD_ID` file existence
+   - Verifies build exit code
 
 ### Recent Changes (Latest Build)
 
@@ -1798,6 +1834,7 @@ CMD ["npm", "start"]
 - ✅ Responsive mobile design
 - ✅ CSV export functionality
 - ✅ Calendar booking views
+- ✅ Build time tracking and display
 
 #### Known Limitations
 - ⚠️ Inbox unread count badge structure ready, count logic pending
@@ -1811,6 +1848,7 @@ CMD ["npm", "start"]
 - LocalStorage access wrapped in try-catch for SSR safety
 - Build time tracking for deployment verification
 - Prebuild script ensures build time is set before compilation
+- Incremental TypeScript compilation enabled
 
 ### Build Dependencies
 
@@ -1846,14 +1884,46 @@ CMD ["npm", "start"]
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
 - `SUPABASE_SERVICE_ROLE_KEY` - Service role key (for webhooks)
 
-**Build-Time Variables**:
-- `NEXT_PUBLIC_BUILD_TIME` - Automatically set during build (UTC ISO format)
+**Build-Time Variables** (Auto-set):
+- `NEXT_PUBLIC_BUILD_TIME` - Automatically set during build via prebuild script (UTC ISO format with milliseconds)
+  - Format: `YYYY-MM-DDTHH:mm:ss.sssZ`
+  - Example: `2025-12-22T08:24:18.041Z`
+  - Accessible in browser via `process.env.NEXT_PUBLIC_BUILD_TIME`
+  - Used by `src/lib/buildInfo.ts` for build date display
 
 **Production Runtime Variables**:
 - `PORT` - Server port (default: 3000, production: 3001)
 
+### Build Scripts Reference
+
+```bash
+# Development
+npm run dev              # Start development server (localhost:3000)
+
+# Production Build
+npm run prebuild         # Set build time (runs automatically before build)
+npm run build           # Full production build with build time tracking
+npm start               # Start production server (default port 3000, configurable via PORT)
+
+# Quality Checks
+npm run lint            # ESLint validation
+npm run type-check      # TypeScript type checking without emit
+```
+
+### Build Output Structure
+
+```
+.next/
+├── BUILD_ID              # Unique build identifier
+├── static/               # Static assets and chunks
+├── server/               # Server-side code and API routes
+├── cache/                # Build cache for faster rebuilds
+└── standalone/           # Standalone build output (if configured)
+```
+
 ---
 
-**Last Updated**: Based on current build configuration
+**Last Updated**: December 22, 2025, 08:24 AM UTC
 **Version**: 1.0.0
+**Build Time Format**: UTC ISO 8601 with milliseconds
 **Maintained By**: PROXe Team

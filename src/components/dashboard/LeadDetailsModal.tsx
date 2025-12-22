@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react'
 import { formatDateTime, formatDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
-import { MdLanguage, MdChat, MdPhone, MdShare, MdAutoAwesome, MdOpenInNew } from 'react-icons/md'
+import { MdLanguage, MdChat, MdPhone, MdShare, MdAutoAwesome, MdOpenInNew, MdHistory, MdCall, MdEvent, MdMessage, MdNote } from 'react-icons/md'
 import { useRouter } from 'next/navigation'
+import LeadStageSelector from './LeadStageSelector'
+import { LeadStage } from '@/types'
 
 // Helper functions for IST date/time formatting
 function formatDateIST(dateString: string | null | undefined): string {
@@ -80,28 +82,6 @@ const ChannelIcon = ({ channel, size = 16, active = false }: { channel: string; 
   }
 };
 
-const STATUS_OPTIONS = [
-  'New Lead',
-  'Follow Up',
-  'RNR (No Response)',
-  'Interested',
-  'Wrong Enquiry',
-  'Call Booked',
-  'Closed'
-]
-
-const getStatusColor = (status: string | null) => {
-  const statusColors: Record<string, { bg: string; text: string }> = {
-    'New Lead': { bg: 'bg-blue-100 dark:bg-blue-900', text: 'text-blue-800 dark:text-blue-200' },
-    'Follow Up': { bg: 'bg-yellow-100 dark:bg-yellow-900', text: 'text-yellow-800 dark:text-yellow-200' },
-    'RNR (No Response)': { bg: 'bg-gray-100 dark:bg-gray-900', text: 'text-gray-800 dark:text-gray-200' },
-    'Interested': { bg: 'bg-green-100 dark:bg-green-900', text: 'text-green-800 dark:text-green-200' },
-    'Wrong Enquiry': { bg: 'bg-red-100 dark:bg-red-900', text: 'text-red-800 dark:text-red-200' },
-    'Call Booked': { bg: 'bg-purple-100 dark:bg-purple-900', text: 'text-purple-800 dark:text-purple-200' },
-    'Closed': { bg: 'bg-slate-100 dark:bg-slate-900', text: 'text-slate-800 dark:text-slate-200' },
-  }
-  return statusColors[status || 'New Lead'] || statusColors['New Lead']
-}
 
 interface Lead {
   id: string
@@ -117,12 +97,11 @@ interface Lead {
   booking_time: string | null
   metadata?: any
   unified_context?: any
-}
-
-interface ChannelSummary {
-  channel: 'web' | 'whatsapp' | 'voice' | 'social'
-  summary: string
-  timestamp: string
+  lead_score?: number | null
+  lead_stage?: string | null
+  sub_stage?: string | null
+  stage_override?: boolean | null
+  last_scored_at?: string | null
 }
 
 interface LeadDetailsModalProps {
@@ -161,175 +140,131 @@ const CHANNEL_CONFIG = {
 
 export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate }: LeadDetailsModalProps) {
   const router = useRouter()
-  const [selectedStatus, setSelectedStatus] = useState<string>(lead?.status || 'New Lead')
-  const [updatingStatus, setUpdatingStatus] = useState(false)
-  const [channelSummaries, setChannelSummaries] = useState<ChannelSummary[]>([])
   const [unifiedSummary, setUnifiedSummary] = useState<string>('')
-  const [loadingSummaries, setLoadingSummaries] = useState(false)
+  const [loadingSummary, setLoadingSummary] = useState(false)
+  const [leadMetrics, setLeadMetrics] = useState<{
+    daysInactive: number
+    responseRate: number
+  } | null>(null)
+  const [activities, setActivities] = useState<any[]>([])
+  const [loadingActivities, setLoadingActivities] = useState(false)
+  const [lastActivity, setLastActivity] = useState<any | null>(null)
 
-  // Update selected status when lead changes
+  // Load AI-generated unified summary and activities when lead changes
   useEffect(() => {
-    if (lead) {
-      setSelectedStatus(lead.status || 'New Lead')
-    }
-  }, [lead])
-
-  // Load conversation summaries when lead changes
-  useEffect(() => {
-    if (lead) {
-      loadConversationSummaries()
+    if (lead && isOpen) {
+      loadUnifiedSummary()
+      loadActivities()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lead])
+  }, [lead, isOpen])
 
-  const loadConversationSummaries = async () => {
+  const loadUnifiedSummary = async () => {
     if (!lead) return
 
-    setLoadingSummaries(true)
+    setLoadingSummary(true)
     try {
-      const summaries: ChannelSummary[] = []
-      const supabase = createClient()
-
-      // First, try to get from unified_context
-      const unifiedContext = lead.unified_context || lead.metadata?.unified_context
-
-      if (unifiedContext) {
-        // Extract summaries from unified_context
-        const channels: Array<'web' | 'whatsapp' | 'voice' | 'social'> = ['web', 'whatsapp', 'voice', 'social']
-        
-        channels.forEach((channel) => {
-          const channelData = unifiedContext[channel]
-          if (channelData?.conversation_summary) {
-            summaries.push({
-              channel,
-              summary: channelData.conversation_summary,
-              timestamp: channelData.last_interaction || channelData.timestamp || ''
-            })
-          }
+      console.log('Loading summary for lead:', lead.id)
+      const response = await fetch(`/api/dashboard/leads/${lead.id}/summary`)
+      console.log('Summary API response status:', response.status)
+      
+      const data = await response.json()
+      console.log('Summary API response data:', data)
+      
+      // Always set summary if it exists, even if there was an error
+      if (data.summary) {
+        setUnifiedSummary(data.summary)
+      } else {
+        setUnifiedSummary(data.error ? `Error: ${data.error}` : 'Unable to generate summary. Please try again.')
+      }
+      
+      // Set metrics if available
+      if (data.data) {
+        setLeadMetrics({
+          daysInactive: data.data.daysInactive || 0,
+          responseRate: data.data.responseRate || 0,
         })
-
-        // Get unified summary
-        if (unifiedContext.unified_summary) {
-          setUnifiedSummary(unifiedContext.unified_summary)
-        }
-      }
-
-      // If no summaries from unified_context, fetch from channel tables
-      if (summaries.length === 0) {
-        // Fetch from web_sessions
-        const { data: webSessions } = await supabase
-          .from('web_sessions')
-          .select('conversation_summary, last_message_at, created_at')
-          .eq('lead_id', lead.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-
-        if (webSessions && webSessions[0]?.conversation_summary) {
-          summaries.push({
-            channel: 'web',
-            summary: webSessions[0].conversation_summary,
-            timestamp: webSessions[0].last_message_at || webSessions[0].created_at || ''
-          })
-        }
-
-        // Fetch from whatsapp_sessions
-        const { data: whatsappSessions } = await supabase
-          .from('whatsapp_sessions')
-          .select('conversation_summary, last_message_at, created_at')
-          .eq('lead_id', lead.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-
-        if (whatsappSessions && whatsappSessions[0]?.conversation_summary) {
-          summaries.push({
-            channel: 'whatsapp',
-            summary: whatsappSessions[0].conversation_summary,
-            timestamp: whatsappSessions[0].last_message_at || whatsappSessions[0].created_at || ''
-          })
-        }
-
-        // Fetch from voice_sessions (uses call_summary field)
-        const { data: voiceSessions } = await supabase
-          .from('voice_sessions')
-          .select('call_summary, created_at, updated_at')
-          .eq('lead_id', lead.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-
-        if (voiceSessions && voiceSessions[0]?.call_summary) {
-          summaries.push({
-            channel: 'voice',
-            summary: voiceSessions[0].call_summary,
-            timestamp: voiceSessions[0].updated_at || voiceSessions[0].created_at || ''
-          })
-        }
-
-        // Fetch from social_sessions
-        const { data: socialSessions } = await supabase
-          .from('social_sessions')
-          .select('conversation_summary, last_engagement_at, created_at, updated_at')
-          .eq('lead_id', lead.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-
-        if (socialSessions && socialSessions[0]?.conversation_summary) {
-          summaries.push({
-            channel: 'social',
-            summary: socialSessions[0].conversation_summary,
-            timestamp: socialSessions[0].last_engagement_at || socialSessions[0].updated_at || socialSessions[0].created_at || ''
-          })
-        }
-      }
-
-      // Fallback: try metadata.web_data
-      if (summaries.length === 0 && lead.metadata?.web_data?.conversation_summary) {
-        summaries.push({
-          channel: 'web',
-          summary: lead.metadata.web_data.conversation_summary,
-          timestamp: lead.metadata.web_data.last_message_at || lead.timestamp
-        })
-      }
-
-      setChannelSummaries(summaries)
-
-      // Set unified summary fallback (most recent summary)
-      if (!unifiedSummary && summaries.length > 0) {
-        const mostRecent = summaries.sort((a, b) => 
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        )[0]
-        setUnifiedSummary(mostRecent.summary)
       }
     } catch (error) {
-      console.error('Error loading conversation summaries:', error)
+      console.error('Error loading unified summary:', error)
+      setUnifiedSummary(`Error: ${error instanceof Error ? error.message : 'Failed to load summary'}`)
     } finally {
-      setLoadingSummaries(false)
+      setLoadingSummary(false)
     }
   }
+
+  const loadActivities = async () => {
+    if (!lead) return
+
+    setLoadingActivities(true)
+    try {
+      const response = await fetch(`/api/dashboard/leads/${lead.id}/activities`)
+      if (!response.ok) {
+        throw new Error('Failed to load activities')
+      }
+      
+      const data = await response.json()
+      if (data.success && data.activities) {
+        setActivities(data.activities)
+        // Set last activity for summary attribution
+        if (data.activities.length > 0) {
+          setLastActivity(data.activities[0])
+        }
+      }
+    } catch (error) {
+      console.error('Error loading activities:', error)
+    } finally {
+      setLoadingActivities(false)
+    }
+  }
+
+  // Calculate days inactive from last_interaction_at or created_at
+  const calculateDaysInactive = () => {
+    if (!lead) return 0
+    // Try to get last_interaction_at from various sources
+    const lastInteraction = 
+      lead.unified_context?.last_interaction_at || 
+      lead.metadata?.last_interaction_at ||
+      lead.unified_context?.web?.last_interaction ||
+      lead.unified_context?.whatsapp?.last_interaction
+    
+    if (lastInteraction) {
+      const days = Math.floor((new Date().getTime() - new Date(lastInteraction).getTime()) / (1000 * 60 * 60 * 24))
+      return Math.max(0, days)
+    }
+    // Fallback: calculate from timestamp
+    const days = Math.floor((new Date().getTime() - new Date(lead.timestamp).getTime()) / (1000 * 60 * 60 * 24))
+    return Math.max(0, days)
+  }
+
+  const daysInactive = leadMetrics?.daysInactive ?? calculateDaysInactive()
 
   if (!isOpen || !lead) return null
 
-  const handleStatusUpdate = async () => {
-    if (selectedStatus === lead.status) return
-    
-    setUpdatingStatus(true)
-    try {
-      await onStatusUpdate(lead.id, selectedStatus)
-    } catch (error) {
-      console.error('Error updating status:', error)
-    } finally {
-      setUpdatingStatus(false)
-    }
+  // Get lead score color
+  const getScoreColor = (score: number | null | undefined) => {
+    if (score === null || score === undefined) return '#6B7280'
+    if (score >= 86) return '#22C55E'
+    if (score >= 61) return '#F97316'
+    if (score >= 31) return '#EAB308'
+    return '#3B82F6'
   }
 
-
-  const formatDateString = (dateString: string) => {
-    if (!dateString) return ''
-    try {
-      const date = new Date(dateString)
-      return format(date, 'MMM d, yyyy')
-    } catch {
-      return dateString
+  // Get stage badge color
+  const getStageBadgeClass = (stage: string | null) => {
+    if (!stage) return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    const stageColors: Record<string, string> = {
+      'New': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+      'Engaged': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
+      'Qualified': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+      'High Intent': 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+      'Booking Made': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+      'Converted': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
+      'Closed Lost': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+      'In Sequence': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+      'Cold': 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
     }
+    return stageColors[stage] || stageColors['New']
   }
 
   return (
@@ -453,83 +388,259 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
               </div>
             </div>
 
-            {/* SECTION 3: Unified Summary */}
-            {(lead.unified_context?.unified_summary || lead.unified_context?.web?.conversation_summary || lead.unified_context?.whatsapp?.conversation_summary) && (
-              <div className="mb-6 p-4 rounded-lg border" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--accent-primary)' }}>
-                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                  <MdAutoAwesome size={16} style={{ color: 'var(--accent-primary)' }} />
-                  Unified Summary
-                </h3>
-                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  {lead.unified_context?.unified_summary || 
-                   lead.unified_context?.web?.conversation_summary ||
-                   lead.unified_context?.whatsapp?.conversation_summary ||
-                   'No summary available'}
-                </p>
-              </div>
-            )}
+            {/* SECTION 3: Unified Summary (AI-generated real-time) */}
+            <div className="mb-6 p-4 rounded-lg border" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--accent-primary)' }}>
+              <h3 className="text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                <MdAutoAwesome size={16} style={{ color: 'var(--accent-primary)' }} />
+                Unified Summary
+                {loadingSummary && (
+                  <span className="text-xs ml-2" style={{ color: 'var(--text-secondary)' }}>Generating...</span>
+                )}
+              </h3>
+              {loadingSummary ? (
+                <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <div className="animate-pulse">Loading summary...</div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm leading-relaxed mb-2" style={{ color: 'var(--text-secondary)' }}>
+                    {unifiedSummary || 'No summary available. Summary will be generated on next page load.'}
+                  </p>
+                  {lastActivity && (
+                    <p className="text-xs mt-2 pt-2 border-t" style={{ borderColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Last action:</span>{' '}
+                      {lastActivity.creator_name || 'Unknown'} • {lastActivity.activity_type} • {formatDateTimeIST(lastActivity.created_at)}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
-            {/* SECTION 4: Status */}
+            {/* SECTION 3.5: Activity Log */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Status</h3>
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <select
-                    value={selectedStatus}
-                    onChange={(e) => setSelectedStatus(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-[#262626] bg-white dark:bg-[#0D0D0D] text-gray-900 dark:text-white rounded-md"
-                  >
-                    {STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                <MdHistory size={16} style={{ color: 'var(--accent-primary)' }} />
+                Activity Log
+              </h3>
+              
+              {loadingActivities ? (
+                <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <div className="animate-pulse">Loading activities...</div>
                 </div>
-                <button
-                  onClick={handleStatusUpdate}
-                  disabled={updatingStatus || selectedStatus === lead.status}
-                  className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: '#5B1A8C' }}
-                >
-                  {updatingStatus ? 'Updating...' : 'Update Status'}
-                </button>
-                <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  getStatusColor(lead.status || 'New Lead').bg
-                } ${getStatusColor(lead.status || 'New Lead').text}`}>
-                  Current: {lead.status || 'New Lead'}
+              ) : activities.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  No activities logged yet.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {activities.map((activity, index) => {
+                    const getActivityIcon = () => {
+                      switch (activity.activity_type) {
+                        case 'call':
+                          return <MdCall size={16} />
+                        case 'meeting':
+                          return <MdEvent size={16} />
+                        case 'message':
+                          return <MdMessage size={16} />
+                        case 'note':
+                          return <MdNote size={16} />
+                        default:
+                          return <MdHistory size={16} />
+                      }
+                    }
+
+                    const getActivityColor = () => {
+                      // All activities are team activities, so use blue
+                      return '#3B82F6' // Blue
+                    }
+
+                    const getActivityTypeLabel = () => {
+                      switch (activity.activity_type) {
+                        case 'call':
+                          return 'Call'
+                        case 'meeting':
+                          return 'Meeting'
+                        case 'message':
+                          return 'Message'
+                        case 'note':
+                          return 'Note'
+                        default:
+                          return 'Activity'
+                      }
+                    }
+
+                    const color = getActivityColor()
+                    const Icon = getActivityIcon()
+
+                    return (
+                      <div key={activity.id} className="flex gap-3">
+                        {/* Timeline line */}
+                        <div className="flex flex-col items-center">
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white"
+                            style={{ backgroundColor: color }}
+                          >
+                            {Icon}
+                          </div>
+                          {index < activities.length - 1 && (
+                            <div
+                              className="w-0.5 flex-1 mt-2"
+                              style={{ backgroundColor: color, opacity: 0.3 }}
+                            />
+                          )}
+                        </div>
+
+                        {/* Activity content */}
+                        <div className="flex-1 pb-4">
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <div>
+                              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {getActivityTypeLabel()}
+                              </p>
+                              <p className="text-xs mt-0.5" style={{ color: color }}>
+                                {activity.creator_name || 'Unknown User'}
+                              </p>
+                            </div>
+                            <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
+                              {formatDateTimeIST(activity.created_at)}
+                            </span>
+                          </div>
+                          {activity.note && (
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                              {activity.note}
+                            </p>
+                          )}
+                          {(activity.duration_minutes || activity.next_followup_date) && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {activity.duration_minutes && (
+                                <span className="text-xs px-2 py-1 rounded" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                                  Duration: {activity.duration_minutes} min
+                                </span>
+                              )}
+                              {activity.next_followup_date && (
+                                <span className="text-xs px-2 py-1 rounded" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                                  Follow-up: {formatDateTimeIST(activity.next_followup_date)}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
+              )}
+            </div>
+
+            {/* SECTION 4: Lead Scoring Section */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Lead Scoring</h3>
+              
+              {/* Lead Score with Progress Bar */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Lead Score</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-2xl font-bold" style={{ color: getScoreColor(lead.lead_score) }}>
+                      {lead.lead_score !== null && lead.lead_score !== undefined ? lead.lead_score : 0}
+                    </p>
+                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>/ 100</span>
+                    {lead.stage_override && (
+                      <span className="text-xs text-gray-400" title="Manual override">🔒</span>
+                    )}
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                  <div
+                    className="h-2.5 rounded-full transition-all"
+                    style={{
+                      width: `${lead.lead_score !== null && lead.lead_score !== undefined ? lead.lead_score : 0}%`,
+                      backgroundColor: getScoreColor(lead.lead_score),
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Metrics Grid */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                {/* Current Stage */}
+                <div>
+                  <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>Current Stage</p>
+                  {lead.lead_stage ? (
+                    <div className={`px-3 py-2 rounded-md text-sm font-semibold inline-block ${getStageBadgeClass(lead.lead_stage)}`}>
+                      {lead.lead_stage}
+                    </div>
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>-</p>
+                  )}
+                </div>
+
+                {/* Days Inactive */}
+                <div>
+                  <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>Days Inactive</p>
+                  <div className="flex items-center gap-2">
+                    <p className={`text-lg font-semibold ${daysInactive > 3 ? 'text-red-600 dark:text-red-400' : ''}`}>
+                      {daysInactive}
+                    </p>
+                    {daysInactive > 3 && (
+                      <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                        Alert
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Response Rate */}
+                <div>
+                  <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>Response Rate</p>
+                  <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {leadMetrics?.responseRate ?? 0}%
+                  </p>
+                </div>
+
+                {/* Sub-stage (only if High Intent) */}
+                {lead.lead_stage === 'High Intent' && lead.sub_stage && (
+                  <div>
+                    <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>Sub-stage</p>
+                    <div className="px-3 py-2 rounded-md text-sm font-semibold inline-block bg-orange-200 text-orange-900 dark:bg-orange-800 dark:text-orange-100">
+                      {lead.sub_stage}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Stage Selector */}
+              <div className="mt-4">
+                <LeadStageSelector
+                  leadId={lead.id}
+                  currentStage={lead.lead_stage as LeadStage | null}
+                  currentSubStage={lead.sub_stage || null}
+                  onStageChange={async (newStage, newSubStage) => {
+                    // Refresh lead data after stage change
+                    const supabase = createClient()
+                    const { data } = await supabase
+                      .from('all_leads')
+                      .select('lead_stage, sub_stage, lead_score, stage_override')
+                      .eq('id', lead.id)
+                      .single()
+                    
+                    if (data) {
+                      // Update local lead state if needed
+                      Object.assign(lead, {
+                        lead_stage: data.lead_stage,
+                        sub_stage: data.sub_stage,
+                        lead_score: data.lead_score,
+                        stage_override: data.stage_override
+                      })
+                    }
+                    // Reload summary and activities after stage change
+                    loadUnifiedSummary()
+                    loadActivities()
+                  }}
+                />
               </div>
             </div>
 
-            {/* SECTION 5: Actions */}
-            <div>
-              <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Actions</h3>
-              <div className="flex gap-3">
-                {lead.phone && (
-                  <a
-                    href={`tel:${lead.phone}`}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
-                    style={{ background: 'var(--accent-primary)', color: 'white' }}
-                  >
-                    <MdPhone size={18} />
-                    Call
-                  </a>
-                )}
-                {lead.phone && (
-                  <a
-                    href={`https://wa.me/91${lead.phone.replace(/\D/g, '').slice(-10)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
-                    style={{ background: '#22C55E', color: 'white' }}
-                  >
-                    <img src="/whatsapp-business-stroke-rounded.svg" alt="WhatsApp" width={18} height={18} style={{ filter: 'invert(1)' }} />
-                    WhatsApp
-                  </a>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>
