@@ -95,7 +95,13 @@ export default function BookingsCalendar({ view = 'full' }: BookingsCalendarProp
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
+                  <span 
+                    className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                    style={{ 
+                      backgroundColor: 'var(--accent-subtle)',
+                      color: 'var(--accent-primary)'
+                    }}
+                  >
                     {booking.source || booking.first_touchpoint || booking.last_touchpoint || 'web'}
                   </span>
                 </div>

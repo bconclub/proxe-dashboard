@@ -119,7 +119,7 @@ const CHANNEL_CONFIG = {
   voice: {
     name: 'Voice',
     icon: MdPhone,
-    color: '#8B5CF6',
+    color: 'var(--accent-primary)',
     emoji: '📞'
   },
   social: {
@@ -141,7 +141,7 @@ const STAGE_PROGRESSION = [
 
 export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate }: LeadDetailsModalProps) {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<'activity' | 'summary' | 'breakdown'>('activity')
+  const [activeTab, setActiveTab] = useState<'activity' | 'summary' | 'breakdown' | 'interaction'>('activity')
   const [showStageDropdown, setShowStageDropdown] = useState(false)
   const [showActivityModal, setShowActivityModal] = useState(false)
   const stageButtonRef = useRef<HTMLDivElement>(null)
@@ -156,6 +156,16 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [activities, setActivities] = useState<any[]>([])
   const [loadingActivities, setLoadingActivities] = useState(false)
+  
+  // 100-Day Interaction data
+  const [interaction90Days, setInteraction90Days] = useState<{
+    totalInteractions: number
+    trend: number
+    dailyData: Array<{ date: string; count: number }>
+    busiestDay: string
+    avgDaily: number
+  } | null>(null)
+  const [loading90Days, setLoading90Days] = useState(false)
   
   // New state for enhanced metrics
   const [channelData, setChannelData] = useState<{
@@ -182,6 +192,170 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
   })
   const [previousScore, setPreviousScore] = useState<number | null>(null)
   const [freshLeadData, setFreshLeadData] = useState<Lead | null>(null)
+  const [scoreBreakdown, setScoreBreakdown] = useState<{
+    aiScore: number
+    activityScore: number
+    businessScore: number
+    totalScore: number
+  } | null>(null)
+
+  // Calculate Lead Score Breakdown
+  const calculateLeadScore = async (leadData: Lead) => {
+    try {
+      const supabase = createClient()
+      
+      // Fetch messages for analysis
+      const { data: messages } = await supabase
+        .from('conversations')
+        .select('content, sender, created_at, channel')
+        .eq('lead_id', leadData.id)
+        .order('created_at', { ascending: true })
+
+      // Get conversation summaries from unified_context
+      const unifiedContext = leadData.unified_context || {}
+      const conversationSummary = 
+        unifiedContext.unified_summary ||
+        unifiedContext.web?.conversation_summary ||
+        unifiedContext.whatsapp?.conversation_summary ||
+        unifiedContext.voice?.conversation_summary ||
+        unifiedContext.social?.conversation_summary ||
+        ''
+      
+      // Combine all text for analysis
+      const allText = [
+        conversationSummary,
+        ...(messages || []).map((m: any) => m.content || '').filter(Boolean)
+      ].join(' ').toLowerCase()
+
+      // ============================================
+      // 1. AI Analysis (60% weight)
+      // ============================================
+      let aiScore = 0
+      
+      // Intent signals detection
+      const intentKeywords = {
+        pricing: ['price', 'cost', 'pricing', 'fee', 'charge', 'afford', 'budget', 'expensive', 'cheap', 'discount', 'offer'],
+        booking: ['book', 'booking', 'schedule', 'appointment', 'reserve', 'available', 'slot', 'time', 'date'],
+        urgency: ['urgent', 'asap', 'soon', 'immediately', 'quickly', 'fast', 'today', 'now', 'hurry', 'rushed']
+      }
+      
+      let intentSignals = 0
+      Object.values(intentKeywords).forEach(keywords => {
+        const found = keywords.some(keyword => allText.includes(keyword))
+        if (found) intentSignals++
+      })
+      // Intent signals: 0-3, normalize to 0-100
+      const intentScore = Math.min(100, (intentSignals / 3) * 100)
+      
+      // Sentiment analysis (simple keyword-based)
+      const positiveWords = ['good', 'great', 'excellent', 'perfect', 'love', 'amazing', 'wonderful', 'happy', 'satisfied', 'interested', 'yes', 'sure', 'definitely']
+      const negativeWords = ['bad', 'terrible', 'worst', 'hate', 'disappointed', 'frustrated', 'angry', 'no', 'not', "don't", "won't", 'cancel']
+      
+      const positiveCount = positiveWords.filter(word => allText.includes(word)).length
+      const negativeCount = negativeWords.filter(word => allText.includes(word)).length
+      const sentimentScore = positiveCount > negativeCount 
+        ? Math.min(100, 50 + (positiveCount * 10))
+        : Math.max(0, 50 - (negativeCount * 10))
+      
+      // Buying signals detection
+      const buyingSignals = [
+        'when can', 'how much', 'what is the price', 'tell me about', 'i want', 'i need',
+        'interested in', 'looking for', 'considering', 'deciding', 'compare', 'options'
+      ]
+      const buyingSignalCount = buyingSignals.filter(signal => allText.includes(signal)).length
+      const buyingSignalScore = Math.min(100, buyingSignalCount * 20)
+      
+      // Combine AI scores (weighted average)
+      aiScore = (intentScore * 0.4 + sentimentScore * 0.3 + buyingSignalScore * 0.3)
+      
+      // ============================================
+      // 2. Activity (30% weight)
+      // ============================================
+      const messageCount = messages?.length || 0
+      // Message count: normalize to 0-1 (100 messages = 1.0, capped at 1.0)
+      const msgCountNormalized = Math.min(1.0, messageCount / 100)
+      
+      // Response rate (52% = good baseline)
+      const customerMessages = messages?.filter((m: any) => m.sender === 'customer').length || 0
+      const agentMessages = messages?.filter((m: any) => m.sender === 'agent').length || 0
+      const responseRate = customerMessages > 0 
+        ? (agentMessages / customerMessages) 
+        : 0
+      // Response rate is already 0-1 (e.g., 0.52 for 52%)
+      
+      // Recency score (days since last interaction)
+      const lastInteraction = 
+        leadData.last_interaction_at || 
+        unifiedContext.whatsapp?.last_interaction ||
+        unifiedContext.web?.last_interaction ||
+        unifiedContext.voice?.last_interaction ||
+        unifiedContext.social?.last_interaction ||
+        leadData.timestamp
+      
+      const daysSinceLastInteraction = lastInteraction
+        ? Math.floor((new Date().getTime() - new Date(lastInteraction).getTime()) / (1000 * 60 * 60 * 24))
+        : 999
+      
+      // Recency: 0 days = 1.0, 7 days = 0.5, 30 days = 0 (normalize to 0-1)
+      const recencyScore = Math.max(0, Math.min(1.0, 1.0 - (daysSinceLastInteraction / 30)))
+      
+      // Channel mix bonus (2+ channels = bonus) - add 0.1 to the average
+      const activeChannels = new Set(messages?.map((m: any) => m.channel).filter(Boolean) || []).size
+      const channelMixBonus = activeChannels >= 2 ? 0.1 : 0
+      
+      // Activity score: ((msg_count/100 + response_rate + recency_score) / 3) * 0.3
+      // Then convert to 0-100 scale for display
+      const activityScoreBase = ((msgCountNormalized + responseRate + recencyScore) / 3) + channelMixBonus
+      const activityScore = Math.min(100, activityScoreBase * 100)
+      
+      // ============================================
+      // 3. Business Signals (10% weight)
+      // ============================================
+      let businessScore = 0
+      
+      // Booking exists = +10 points
+      const hasBooking = !!(leadData.booking_date || leadData.booking_time || 
+        unifiedContext.web?.booking_date || unifiedContext.web?.booking?.date ||
+        unifiedContext.whatsapp?.booking_date || unifiedContext.whatsapp?.booking?.date ||
+        unifiedContext.voice?.booking_date || unifiedContext.voice?.booking?.date ||
+        unifiedContext.social?.booking_date || unifiedContext.social?.booking?.date)
+      if (hasBooking) businessScore += 10
+      
+      // Email/phone provided = +5 points
+      if (leadData.email || leadData.phone) businessScore += 5
+      
+      // Multi-touchpoint = +5 points (2+ channels)
+      if (activeChannels >= 2) businessScore += 5
+      
+      // Business score can be 0-20, but we need it to contribute 10% (0-10 points) to total
+      // So we normalize: businessScore (0-20) -> (0-10) for the 10% weight
+      const businessScoreNormalized = Math.min(10, businessScore)
+      
+      // ============================================
+      // Calculate Total Score
+      // ============================================
+      const totalScore = Math.min(100, 
+        (aiScore * 0.6) + 
+        (activityScore * 0.3) + 
+        businessScoreNormalized
+      )
+      
+      return {
+        aiScore: Math.round(aiScore * 0.6), // Already weighted (0-60)
+        activityScore: Math.round(activityScore * 0.3), // Already weighted (0-30)
+        businessScore: Math.round(businessScoreNormalized), // Already normalized to 0-10 for 10% weight
+        totalScore: Math.round(totalScore)
+      }
+    } catch (error) {
+      console.error('Error calculating lead score:', error)
+      return {
+        aiScore: 0,
+        activityScore: 0,
+        businessScore: 0,
+        totalScore: 0
+      }
+    }
+  }
 
   // Fetch fresh lead data from database when modal opens
   const loadFreshLeadData = async () => {
@@ -200,6 +374,34 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
       }
 
       if (data) {
+        // Get booking from multiple sources (same logic as loadQuickStats)
+        const unifiedContext = data.unified_context || lead.unified_context
+        const bookingDate = 
+          data.booking_date || 
+          lead.booking_date || 
+          unifiedContext?.web?.booking_date || 
+          unifiedContext?.web?.booking?.date ||
+          unifiedContext?.whatsapp?.booking_date ||
+          unifiedContext?.whatsapp?.booking?.date ||
+          unifiedContext?.voice?.booking_date ||
+          unifiedContext?.voice?.booking?.date ||
+          unifiedContext?.social?.booking_date ||
+          unifiedContext?.social?.booking?.date ||
+          null
+        
+        const bookingTime = 
+          data.booking_time || 
+          lead.booking_time || 
+          unifiedContext?.web?.booking_time || 
+          unifiedContext?.web?.booking?.time ||
+          unifiedContext?.whatsapp?.booking_time ||
+          unifiedContext?.whatsapp?.booking?.time ||
+          unifiedContext?.voice?.booking_time ||
+          unifiedContext?.voice?.booking?.time ||
+          unifiedContext?.social?.booking_time ||
+          unifiedContext?.social?.booking?.time ||
+          null
+        
         // Merge fresh data with existing lead prop
         const mergedLead: Lead = {
           ...lead,
@@ -208,8 +410,8 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
           phone: data.phone || lead.phone,
           timestamp: data.created_at || lead.timestamp,
           last_interaction_at: data.last_interaction_at || lead.last_interaction_at || null,
-          booking_date: data.booking_date || lead.booking_date || data.unified_context?.web?.booking_date || data.unified_context?.whatsapp?.booking_date || null,
-          booking_time: data.booking_time || lead.booking_time || data.unified_context?.web?.booking_time || data.unified_context?.whatsapp?.booking_time || null,
+          booking_date: bookingDate,
+          booking_time: bookingTime,
           lead_score: data.lead_score ?? lead.lead_score ?? null,
           lead_stage: data.lead_stage || lead.lead_stage || null,
           sub_stage: data.sub_stage || lead.sub_stage || null,
@@ -226,6 +428,104 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
     }
   }
 
+  // Load 100-day interaction data
+  const load90DayInteractions = async () => {
+    if (!lead) return
+    setLoading90Days(true)
+    try {
+      const supabase = createClient()
+      
+      // Get current date and 100 days ago
+      const now = new Date()
+      const oneHundredDaysAgo = new Date(now)
+      oneHundredDaysAgo.setDate(oneHundredDaysAgo.getDate() - 100)
+      const twoHundredDaysAgo = new Date(now)
+      twoHundredDaysAgo.setDate(twoHundredDaysAgo.getDate() - 200)
+      
+      // Fetch messages from last 100 days (customer messages only)
+      const { data: messages100Days, error: error100 } = await supabase
+        .from('conversations')
+        .select('created_at, sender')
+        .eq('lead_id', lead.id)
+        .eq('sender', 'customer')
+        .gte('created_at', oneHundredDaysAgo.toISOString())
+        .order('created_at', { ascending: true })
+      
+      // Fetch messages from previous 100 days (for trend comparison)
+      const { data: messagesPrevious100, error: errorPrev } = await supabase
+        .from('conversations')
+        .select('created_at, sender')
+        .eq('lead_id', lead.id)
+        .eq('sender', 'customer')
+        .gte('created_at', twoHundredDaysAgo.toISOString())
+        .lt('created_at', oneHundredDaysAgo.toISOString())
+      
+      if (error100 || errorPrev) {
+        console.error('Error loading 100-day interactions:', error100 || errorPrev)
+        setLoading90Days(false)
+        return
+      }
+      
+      // Group messages by date for last 100 days
+      const dailyCounts: Record<string, number> = {}
+      const nowDate = new Date(now)
+      
+      // Initialize all 100 days with 0
+      for (let i = 0; i < 100; i++) {
+        const date = new Date(nowDate)
+        date.setDate(date.getDate() - i)
+        const dateStr = date.toISOString().split('T')[0]
+        dailyCounts[dateStr] = 0
+      }
+      
+      // Count messages per day
+      messages100Days?.forEach((msg: any) => {
+        const dateStr = new Date(msg.created_at).toISOString().split('T')[0]
+        if (dailyCounts[dateStr] !== undefined) {
+          dailyCounts[dateStr] = (dailyCounts[dateStr] || 0) + 1
+        }
+      })
+      
+      // Convert to array and sort by date
+      const dailyData = Object.entries(dailyCounts)
+        .map(([date, count]) => ({ date, count }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+      
+      // Calculate total interactions
+      const totalInteractions = messages100Days?.length || 0
+      const previousTotal = messagesPrevious100?.length || 0
+      
+      // Calculate trend
+      const trend = previousTotal > 0 
+        ? Math.round(((totalInteractions - previousTotal) / previousTotal) * 100)
+        : totalInteractions > 0 ? 100 : 0
+      
+      // Calculate busiest day of week
+      const dayCounts: Record<string, number> = {}
+      messages100Days?.forEach((msg: any) => {
+        const dayName = new Date(msg.created_at).toLocaleDateString('en-US', { weekday: 'long' })
+        dayCounts[dayName] = (dayCounts[dayName] || 0) + 1
+      })
+      const busiestDay = Object.entries(dayCounts)
+        .sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
+      
+      // Calculate average daily
+      const avgDaily = totalInteractions / 100
+      
+      setInteraction90Days({
+        totalInteractions,
+        trend,
+        dailyData,
+        busiestDay,
+        avgDaily,
+      })
+    } catch (error) {
+      console.error('Error loading 90-day interactions:', error)
+    } finally {
+      setLoading90Days(false)
+    }
+  }
+
   // Load all data when lead changes
   useEffect(() => {
     if (lead && isOpen) {
@@ -238,6 +538,22 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead, isOpen])
+
+  // Load score breakdown when breakdown tab is active
+  useEffect(() => {
+    if (activeTab === 'breakdown' && lead && isOpen) {
+      loadScoreBreakdown()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, lead, isOpen, freshLeadData])
+
+  // Load 100-day interaction data when interaction tab is active
+  useEffect(() => {
+    if (activeTab === 'interaction' && lead && isOpen) {
+      load90DayInteractions()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, lead, isOpen])
 
   const loadUnifiedSummary = async () => {
     if (!lead) return
@@ -315,9 +631,10 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
     if (!lead) return
     try {
       const supabase = createClient()
+      // Select metadata to get response_time_ms
       const { data: messages } = await supabase
         .from('conversations')
-        .select('sender, created_at')
+        .select('sender, created_at, metadata')
         .eq('lead_id', lead.id)
         .order('created_at', { ascending: true })
 
@@ -329,33 +646,79 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
         .single()
 
       if (messages && Array.isArray(messages) && messages.length > 0) {
-        const customerMessages = messages.filter((m: any) => m.sender === 'customer').length
-        const responseRate = Math.round((customerMessages / messages.length) * 100)
+        // Calculate response rate: (agent replies / customer messages) * 100
+        const customerMessages = messages.filter((m: any) => m.sender === 'customer')
+        const agentMessages = messages.filter((m: any) => m.sender === 'agent')
+        const responseRate = customerMessages.length > 0 
+          ? Math.round((agentMessages.length / customerMessages.length) * 100)
+          : 0
 
-        // Calculate average response time
+        // Calculate average response time from metadata.response_time_ms
         let totalResponseTime = 0
         let responseCount = 0
-        for (let i = 0; i < messages.length - 1; i++) {
-          const msg1 = messages[i] as any
-          const msg2 = messages[i + 1] as any
-          if (msg1.sender === 'customer' && msg2.sender === 'agent') {
-            const timeDiff = new Date(msg2.created_at).getTime() - new Date(msg1.created_at).getTime()
-            totalResponseTime += timeDiff
-            responseCount++
+        
+        // First, try to use metadata.response_time_ms
+        messages.forEach((msg: any) => {
+          if (msg.sender === 'agent' && msg.metadata?.response_time_ms) {
+            const responseTimeMs = typeof msg.metadata.response_time_ms === 'number' 
+              ? msg.metadata.response_time_ms 
+              : parseInt(msg.metadata.response_time_ms, 10)
+            if (!isNaN(responseTimeMs) && responseTimeMs > 0) {
+              totalResponseTime += responseTimeMs
+              responseCount++
+            }
+          }
+        })
+        
+        // Fallback to timestamp calculation if no metadata.response_time_ms
+        if (responseCount === 0) {
+          for (let i = 0; i < messages.length - 1; i++) {
+            const msg1 = messages[i] as any
+            const msg2 = messages[i + 1] as any
+            if (msg1.sender === 'customer' && msg2.sender === 'agent') {
+              const timeDiff = new Date(msg2.created_at).getTime() - new Date(msg1.created_at).getTime()
+              if (timeDiff > 0) {
+                totalResponseTime += timeDiff
+                responseCount++
+              }
+            }
           }
         }
-        const avgResponseTime = responseCount > 0 ? Math.round(totalResponseTime / responseCount / 60000) : 0 // in minutes
+        
+        // Convert to minutes (metadata is in ms, timestamp diff is also in ms)
+        const avgResponseTime = responseCount > 0 
+          ? Math.round(totalResponseTime / responseCount / 60000) 
+          : 0
 
         // Check booking from multiple sources - prioritize fresh data
         const unifiedContext = leadData?.unified_context || lead.unified_context
-        const hasBooking = !!(
-          leadData?.booking_date ||
+        const bookingDate = 
+          leadData?.booking_date || 
           lead.booking_date || 
           unifiedContext?.web?.booking_date || 
+          unifiedContext?.web?.booking?.date ||
           unifiedContext?.whatsapp?.booking_date ||
+          unifiedContext?.whatsapp?.booking?.date ||
           unifiedContext?.voice?.booking_date ||
-          unifiedContext?.social?.booking_date
-        )
+          unifiedContext?.voice?.booking?.date ||
+          unifiedContext?.social?.booking_date ||
+          unifiedContext?.social?.booking?.date ||
+          null
+        
+        const bookingTime = 
+          leadData?.booking_time || 
+          lead.booking_time || 
+          unifiedContext?.web?.booking_time || 
+          unifiedContext?.web?.booking?.time ||
+          unifiedContext?.whatsapp?.booking_time ||
+          unifiedContext?.whatsapp?.booking?.time ||
+          unifiedContext?.voice?.booking_time ||
+          unifiedContext?.voice?.booking?.time ||
+          unifiedContext?.social?.booking_time ||
+          unifiedContext?.social?.booking?.time ||
+          null
+        
+        const hasBooking = !!(bookingDate || bookingTime)
 
         setQuickStats({
           totalMessages: messages.length,
@@ -366,14 +729,34 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
       } else {
         // Even with no messages, check for booking
         const unifiedContext = leadData?.unified_context || lead.unified_context
-        const hasBooking = !!(
-          leadData?.booking_date ||
+        const bookingDate = 
+          leadData?.booking_date || 
           lead.booking_date || 
           unifiedContext?.web?.booking_date || 
+          unifiedContext?.web?.booking?.date ||
           unifiedContext?.whatsapp?.booking_date ||
+          unifiedContext?.whatsapp?.booking?.date ||
           unifiedContext?.voice?.booking_date ||
-          unifiedContext?.social?.booking_date
-        )
+          unifiedContext?.voice?.booking?.date ||
+          unifiedContext?.social?.booking_date ||
+          unifiedContext?.social?.booking?.date ||
+          null
+        
+        const bookingTime = 
+          leadData?.booking_time || 
+          lead.booking_time || 
+          unifiedContext?.web?.booking_time || 
+          unifiedContext?.web?.booking?.time ||
+          unifiedContext?.whatsapp?.booking_time ||
+          unifiedContext?.whatsapp?.booking?.time ||
+          unifiedContext?.voice?.booking_time ||
+          unifiedContext?.voice?.booking?.time ||
+          unifiedContext?.social?.booking_time ||
+          unifiedContext?.social?.booking?.time ||
+          null
+        
+        const hasBooking = !!(bookingDate || bookingTime)
+        
         setQuickStats({
           totalMessages: 0,
           responseRate: 0,
@@ -404,6 +787,13 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
     } catch (error) {
       console.error('Error loading score history:', error)
     }
+  }
+
+  const loadScoreBreakdown = async () => {
+    if (!lead) return
+    const leadData = freshLeadData || lead
+    const breakdown = await calculateLeadScore(leadData)
+    setScoreBreakdown(breakdown)
   }
 
   if (!isOpen || !lead) return null
@@ -489,7 +879,7 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
       'Booking Made': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
       'Converted': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
       'Closed Lost': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-      'In Sequence': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+      'In Sequence': '', // Will use inline styles with CSS variables
       'Cold': 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
     }
     return stageColors[stage] || stageColors['New']
@@ -649,7 +1039,13 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
               {/* Stage Badge */}
               <div className="flex-1">
                 <div className="flex items-center gap-3">
-                  <div className={`px-4 py-2 rounded-lg text-base font-semibold ${getStageBadgeClass(currentStage)}`}>
+                  <div 
+                    className={`px-4 py-2 rounded-lg text-base font-semibold ${getStageBadgeClass(currentStage)}`}
+                    style={currentStage === 'In Sequence' ? {
+                      backgroundColor: 'var(--accent-subtle)',
+                      color: 'var(--accent-primary)'
+                    } : undefined}
+                  >
                     {currentStage}
                   </div>
                   <button
@@ -691,6 +1087,10 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
                           ? getStageBadgeClass(stage) + ' font-semibold'
                           : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
                       }`}
+                      style={currentStage === stage && stage === 'In Sequence' ? {
+                        backgroundColor: 'var(--accent-subtle)',
+                        color: 'var(--accent-primary)'
+                      } : undefined}
                     >
                       {stage}
                     </button>
@@ -763,7 +1163,13 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
                         {formatDateIST(
                           currentLead.booking_date || 
                           currentLead.unified_context?.web?.booking_date || 
-                          currentLead.unified_context?.whatsapp?.booking_date
+                          currentLead.unified_context?.web?.booking?.date ||
+                          currentLead.unified_context?.whatsapp?.booking_date ||
+                          currentLead.unified_context?.whatsapp?.booking?.date ||
+                          currentLead.unified_context?.voice?.booking_date ||
+                          currentLead.unified_context?.voice?.booking?.date ||
+                          currentLead.unified_context?.social?.booking_date ||
+                          currentLead.unified_context?.social?.booking?.date
                         )}
                       </p>
                     </div>
@@ -771,7 +1177,13 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
                       {formatBookingTime(
                         currentLead.booking_time || 
                         currentLead.unified_context?.web?.booking_time || 
-                        currentLead.unified_context?.whatsapp?.booking_time
+                        currentLead.unified_context?.web?.booking?.time ||
+                        currentLead.unified_context?.whatsapp?.booking_time ||
+                        currentLead.unified_context?.whatsapp?.booking?.time ||
+                        currentLead.unified_context?.voice?.booking_time ||
+                        currentLead.unified_context?.voice?.booking?.time ||
+                        currentLead.unified_context?.social?.booking_time ||
+                        currentLead.unified_context?.social?.booking?.time
                       )}
                     </p>
                   </>
@@ -813,6 +1225,16 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
               }`}
             >
               Score Breakdown
+            </button>
+            <button
+              onClick={() => setActiveTab('interaction')}
+              className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'interaction'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              100-Day Interaction
             </button>
           </div>
 
@@ -953,50 +1375,266 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
             {/* Score Breakdown Tab */}
             {activeTab === 'breakdown' && (
               <div className="space-y-4">
-                <div className="p-4 rounded-lg bg-gray-50 dark:bg-[#1F1F1F]">
-                  <h3 className="text-sm font-semibold mb-4 text-gray-900 dark:text-white">Score Components</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-xs text-gray-600 dark:text-gray-400">AI Analysis (60%)</span>
-                        <span className="text-xs font-semibold text-gray-900 dark:text-white">
-                          {Math.round(score * 0.6)}
-                        </span>
+                {scoreBreakdown ? (
+                  <>
+                    <div className="p-4 rounded-lg bg-gray-50 dark:bg-[#1F1F1F]">
+                      <h3 className="text-sm font-semibold mb-4 text-gray-900 dark:text-white">Score Components</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex justify-between mb-1">
+                            <span className="text-xs text-gray-600 dark:text-gray-400">AI Analysis (60%)</span>
+                            <span className="text-xs font-semibold text-gray-900 dark:text-white">
+                              {scoreBreakdown.aiScore}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="h-2 rounded-full bg-blue-500" 
+                              style={{ width: `${Math.min(100, (scoreBreakdown.aiScore / 60) * 100)}%` }} 
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Intent signals, sentiment analysis, buying signals from conversation
+                          </p>
+                        </div>
+                        <div>
+                          <div className="flex justify-between mb-1">
+                            <span className="text-xs text-gray-600 dark:text-gray-400">Activity (30%)</span>
+                            <span className="text-xs font-semibold text-gray-900 dark:text-white">
+                              {scoreBreakdown.activityScore}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="h-2 rounded-full bg-green-500" 
+                              style={{ width: `${Math.min(100, (scoreBreakdown.activityScore / 30) * 100)}%` }} 
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Message count, response rate, recency, channel mix
+                          </p>
+                        </div>
+                        <div>
+                          <div className="flex justify-between mb-1">
+                            <span className="text-xs text-gray-600 dark:text-gray-400">Business Signals (10%)</span>
+                            <span className="text-xs font-semibold text-gray-900 dark:text-white">
+                              {scoreBreakdown.businessScore}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="h-2 rounded-full" 
+                              style={{ 
+                                width: `${Math.min(100, (scoreBreakdown.businessScore / 10) * 100)}%`,
+                                backgroundColor: 'var(--accent-primary)'
+                              }} 
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Booking exists, contact info provided, multi-touchpoint
+                          </p>
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div className="h-2 rounded-full bg-blue-500" style={{ width: `${score * 0.6}%` }} />
+                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-[#262626]">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">Total Score</span>
+                          <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                            {scoreBreakdown.totalScore}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-xs text-gray-600 dark:text-gray-400">Activity (30%)</span>
-                        <span className="text-xs font-semibold text-gray-900 dark:text-white">
-                          {Math.round(score * 0.3)}
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div className="h-2 rounded-full bg-green-500" style={{ width: `${score * 0.3}%` }} />
-                      </div>
+                    <div className="p-4 rounded-lg bg-gray-50 dark:bg-[#1F1F1F]">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Score is calculated automatically based on engagement, intent signals, and activity patterns.
+                        {currentLead.last_scored_at && ` Last updated: ${formatDateTimeIST(currentLead.last_scored_at)}`}
+                      </p>
                     </div>
-                    <div>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-xs text-gray-600 dark:text-gray-400">Business Signals (10%)</span>
-                        <span className="text-xs font-semibold text-gray-900 dark:text-white">
-                          {Math.round(score * 0.1)}
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div className="h-2 rounded-full bg-purple-500" style={{ width: `${score * 0.1}%` }} />
-                      </div>
-                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-center py-8 text-gray-500 dark:text-gray-400">
+                    <div className="animate-pulse">Calculating score breakdown...</div>
                   </div>
-                </div>
-                <div className="p-4 rounded-lg bg-gray-50 dark:bg-[#1F1F1F]">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Score is calculated automatically based on engagement, intent signals, and activity patterns.
-                    {currentLead.last_scored_at && ` Last updated: ${formatDateTimeIST(currentLead.last_scored_at)}`}
-                  </p>
-                </div>
+                )}
+              </div>
+            )}
+
+            {/* 100-Day Interaction Tab */}
+            {activeTab === 'interaction' && (
+              <div className="space-y-4">
+                {loading90Days ? (
+                  <div className="text-sm text-center py-8 text-gray-500 dark:text-gray-400">
+                    <div className="animate-pulse">Loading interaction data...</div>
+                  </div>
+                ) : interaction90Days ? (
+                  <>
+                    {/* Main Metric */}
+                    <div className="flex items-end justify-between">
+                      <div>
+                        <p className="text-4xl font-bold text-gray-900 dark:text-white">
+                          {interaction90Days.totalInteractions}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total interactions</p>
+                      </div>
+                      {interaction90Days.trend !== 0 && (
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium"
+                          style={{
+                            backgroundColor: interaction90Days.trend > 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            color: interaction90Days.trend > 0 ? '#22C55E' : '#EF4444'
+                          }}
+                        >
+                          {interaction90Days.trend > 0 ? (
+                            <MdTrendingUp size={14} />
+                          ) : (
+                            <MdTrendingDown size={14} />
+                          )}
+                          <span>{Math.abs(interaction90Days.trend)}%</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Dot Matrix Heatmap - 15 weeks (columns) × 7 days (rows) = 105 cells, showing last 100 days */}
+                    <div className="w-full">
+                      <div className="flex flex-col gap-1">
+                        {/* Week labels row (top) - Right to left, most recent first */}
+                        <div className="flex gap-1 mb-1 justify-end">
+                          <div className="w-10 text-xs text-gray-500 dark:text-gray-400"></div>
+                          {Array.from({ length: 15 }, (_, weekIndex) => {
+                            // Reverse order: week 0 (this week) on right, week 14 on left
+                            const reversedIndex = 14 - weekIndex
+                            return (
+                              <div key={weekIndex} className="flex-1 text-center text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[30px]">
+                                {reversedIndex === 0 ? 'Now' : `${reversedIndex}w`}
+                              </div>
+                            )
+                          }).reverse()}
+                        </div>
+                        {/* Day rows - 7 rows (days of week), each with 15 columns (weeks) */}
+                        {[0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => {
+                          const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+                          
+                          // Build a map of date -> count for quick lookup
+                          const dateCountMap = new Map<string, number>()
+                          interaction90Days.dailyData.forEach(d => {
+                            dateCountMap.set(d.date, d.count)
+                          })
+                          
+                          // Calculate dates for this day of week across 15 weeks (right to left)
+                          const today = new Date()
+                          today.setHours(0, 0, 0, 0)
+                          const weekCells: Array<{ date: string; count: number }> = []
+                          
+                          // For each of the 15 weeks (0 = this week, 14 = 14 weeks ago)
+                          for (let weekIndex = 0; weekIndex < 15; weekIndex++) {
+                            // Calculate the date: go back (weekIndex * 7) days, then adjust to this day of week
+                            const baseDate = new Date(today)
+                            baseDate.setDate(baseDate.getDate() - (weekIndex * 7))
+                            
+                            // Find the date that falls on this day of week in this week
+                            const daysToSubtract = (baseDate.getDay() - dayOfWeek + 7) % 7
+                            const targetDate = new Date(baseDate)
+                            targetDate.setDate(targetDate.getDate() - daysToSubtract)
+                            
+                            // Check if this date is within the last 100 days
+                            const daysAgo = Math.floor((today.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24))
+                            
+                            if (daysAgo >= 0 && daysAgo < 100) {
+                              const dateStr = targetDate.toISOString().split('T')[0]
+                              const count = dateCountMap.get(dateStr) || 0
+                              weekCells.push({ date: dateStr, count })
+                            } else {
+                              weekCells.push({ date: '', count: 0 })
+                            }
+                          }
+                          
+                          // Reverse the array so most recent is on the right
+                          const reversedCells = [...weekCells].reverse()
+                          
+                          return (
+                            <div key={dayOfWeek} className="flex items-center gap-1 justify-end">
+                              {/* Day label on left */}
+                              <div className="w-10 text-xs text-gray-500 dark:text-gray-400 text-right pr-2 font-medium flex-shrink-0">
+                                {dayNames[dayOfWeek]}
+                              </div>
+                              {/* Days across 15 weeks - reversed (most recent on right) */}
+                              <div className="flex flex-wrap justify-end flex-1" style={{ gap: '3px' }}>
+                                {reversedCells.map((day, weekIndex) => {
+                                  if (!day.date) {
+                                    // Empty cell
+                                    return (
+                                      <div
+                                        key={`${dayOfWeek}-${weekIndex}`}
+                                        className="w-3 h-3 flex-shrink-0"
+                                      />
+                                    )
+                                  }
+                                  
+                                  // Improved color intensity mapping with larger dots
+                                  let opacity = 0.1 // Very faint for 0 msgs
+                                  let size = 10 // Base size (increased)
+                                  
+                                  if (day.count === 0) {
+                                    opacity = 0.08 // Barely visible
+                                    size = 10
+                                  } else if (day.count >= 1 && day.count <= 2) {
+                                    opacity = 0.5 // Medium opacity
+                                    size = 11
+                                  } else if (day.count >= 3 && day.count <= 5) {
+                                    opacity = 0.85 // Bright accent
+                                    size = 12
+                                  } else if (day.count > 5) {
+                                    opacity = 1.0 // Full accent
+                                    size = 12 // Larger dot
+                                  }
+                                  
+                                  // Format date for tooltip
+                                  const date = new Date(day.date)
+                                  const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                  
+                                  return (
+                                    <div
+                                      key={`${dayOfWeek}-${weekIndex}`}
+                                      className="rounded-full cursor-pointer transition-all hover:scale-125 flex-shrink-0"
+                                      style={{
+                                        width: `${size}px`,
+                                        height: `${size}px`,
+                                        backgroundColor: 'var(--accent-primary)',
+                                        opacity: opacity,
+                                        minWidth: '10px',
+                                        minHeight: '10px',
+                                      }}
+                                      title={`${dateStr}: ${day.count} message${day.count !== 1 ? 's' : ''}`}
+                                    />
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Secondary Metrics */}
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div className="p-3 bg-gray-50 dark:bg-[#1F1F1F] rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Busiest Day</p>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {interaction90Days.busiestDay}
+                        </p>
+                      </div>
+                      <div className="p-3 bg-gray-50 dark:bg-[#1F1F1F] rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Avg Daily</p>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {interaction90Days.avgDaily.toFixed(1)} msgs/day
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-center py-4 text-gray-500 dark:text-gray-400">
+                    No interaction data available
+                  </div>
+                )}
               </div>
             )}
           </div>

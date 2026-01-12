@@ -39,7 +39,7 @@ const getStageColor = (stage: LeadStage | null): string => {
     'Booking Made': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
     'Converted': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
     'Closed Lost': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-    'In Sequence': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+    'In Sequence': '', // Uses inline styles with CSS variables
     'Cold': 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
   }
   return stage ? colors[stage] : colors['New']

@@ -195,7 +195,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <div 
+            className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto"
+            style={{ borderColor: 'var(--accent-primary)' }}
+          ></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400">Checking authentication...</p>
         </div>
       </div>

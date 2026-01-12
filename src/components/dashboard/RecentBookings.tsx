@@ -58,14 +58,21 @@ export default function RecentBookings() {
     setLoading(false)
   }
 
-  const getSourceColor = (source: string | null | undefined) => {
+  const getSourceColor = (source: string | null | undefined): { className?: string; style?: React.CSSProperties } => {
+    const accentColor = typeof window !== 'undefined' 
+      ? getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || 'var(--accent-primary)'
+      : 'var(--accent-primary)'
+    
+    if (source === 'voice') {
+      return { style: { backgroundColor: accentColor } }
+    }
+    
     const sourceColors: Record<string, string> = {
       web: 'bg-blue-500',
       whatsapp: 'bg-green-500',
-      voice: 'bg-purple-500',
       social: 'bg-pink-500',
     }
-    return sourceColors[source || ''] || 'bg-gray-500'
+    return { className: sourceColors[source || ''] || 'bg-gray-500' }
   }
 
   const formatBookingDateTime = (date: string | null, time: string | null) => {
@@ -118,7 +125,8 @@ export default function RecentBookings() {
               <span
                 className={`px-2 py-1 rounded-full text-xs font-medium text-white ${getSourceColor(
                   booking.first_touchpoint
-                )}`}
+                ).className || ''}`}
+                style={getSourceColor(booking.first_touchpoint).style}
               >
                 {booking.first_touchpoint}
               </span>

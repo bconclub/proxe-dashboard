@@ -21,7 +21,7 @@ interface ActivityLoggerModalProps {
 
 const ACTIVITY_TYPES = [
   { value: 'call' as const, label: 'Call', icon: MdPhone, color: '#3B82F6' },
-  { value: 'meeting' as const, label: 'Meeting', icon: MdEvent, color: '#8B5CF6' },
+  { value: 'meeting' as const, label: 'Meeting', icon: MdEvent, color: typeof window !== 'undefined' ? getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || 'var(--accent-primary)' : 'var(--accent-primary)' },
   { value: 'message' as const, label: 'Message', icon: MdMessage, color: '#22C55E' },
   { value: 'note' as const, label: 'Note', icon: MdNote, color: '#F97316' },
 ]

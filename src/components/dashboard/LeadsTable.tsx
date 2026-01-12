@@ -24,7 +24,7 @@ const getStatusColor = (status: string | null) => {
     'RNR (No Response)': { bg: 'bg-gray-100 dark:bg-gray-900', text: 'text-gray-800 dark:text-gray-200' },
     'Interested': { bg: 'bg-green-100 dark:bg-green-900', text: 'text-green-800 dark:text-green-200' },
     'Wrong Enquiry': { bg: 'bg-red-100 dark:bg-red-900', text: 'text-red-800 dark:text-red-200' },
-    'Call Booked': { bg: 'bg-purple-100 dark:bg-purple-900', text: 'text-purple-800 dark:text-purple-200' },
+    'Call Booked': { bg: '', text: '', style: { backgroundColor: 'var(--accent-subtle)', color: 'var(--accent-primary)' } },
     'Closed': { bg: 'bg-slate-100 dark:bg-slate-900', text: 'text-slate-800 dark:text-slate-200' },
   }
   return statusColors[status || 'New Lead'] || statusColors['New Lead']
@@ -39,7 +39,7 @@ const getStageColor = (stage: string | null) => {
     'Booking Made': { bg: 'bg-green-100 dark:bg-green-900', text: 'text-green-800 dark:text-green-200' },
     'Converted': { bg: 'bg-emerald-100 dark:bg-emerald-900', text: 'text-emerald-800 dark:text-emerald-200' },
     'Closed Lost': { bg: 'bg-red-100 dark:bg-red-900', text: 'text-red-800 dark:text-red-200' },
-    'In Sequence': { bg: 'bg-purple-100 dark:bg-purple-900', text: 'text-purple-800 dark:text-purple-200' },
+    'In Sequence': { bg: '', text: '', style: { backgroundColor: 'var(--accent-subtle)', color: 'var(--accent-primary)' } },
     'Cold': { bg: 'bg-gray-100 dark:bg-gray-900', text: 'text-gray-800 dark:text-gray-200' },
   }
   return stageColors[stage || 'New'] || stageColors['New']
@@ -392,9 +392,12 @@ export default function LeadsTable({
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {lead.lead_stage ? (
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        getStageColor(lead.lead_stage).bg
-                      } ${getStageColor(lead.lead_stage).text}`}>
+                      <span 
+                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          getStageColor(lead.lead_stage).bg || ''
+                        } ${getStageColor(lead.lead_stage).text || ''}`}
+                        style={(getStageColor(lead.lead_stage) as any).style}
+                      >
                         {lead.lead_stage}
                         {lead.sub_stage && (
                           <span className="ml-1 text-xs opacity-75">({lead.sub_stage})</span>
@@ -413,9 +416,12 @@ export default function LeadsTable({
                     {formatDateTime(lead.timestamp)}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      getStatusColor(lead.status || 'New Lead').bg
-                    } ${getStatusColor(lead.status || 'New Lead').text}`}>
+                    <span 
+                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        getStatusColor(lead.status || 'New Lead').bg || ''
+                      } ${getStatusColor(lead.status || 'New Lead').text || ''}`}
+                      style={(getStatusColor(lead.status || 'New Lead') as any).style}
+                    >
                       {lead.status || 'New Lead'}
                     </span>
                   </td>
