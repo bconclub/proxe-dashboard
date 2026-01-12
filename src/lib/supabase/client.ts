@@ -10,11 +10,41 @@ export function createClient() {
     return supabaseClient
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
+  // Support both PROXE-prefixed and standard variable names
+  const supabaseUrl = process.env.NEXT_PUBLIC_PROXE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_PROXE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
   
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    console.warn('⚠️  Supabase environment variables are not set. Please configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file')
+  // Enhanced error checking
+  const hasUrl = !!(process.env.NEXT_PUBLIC_PROXE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)
+  const hasKey = !!(process.env.NEXT_PUBLIC_PROXE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  
+  if (!hasUrl || !hasKey) {
+    console.error('❌ Supabase environment variables are not set!')
+    console.error('   Missing:', {
+      url: !hasUrl,
+      anonKey: !hasKey,
+    })
+    console.error('   Please configure NEXT_PUBLIC_PROXE_SUPABASE_URL and NEXT_PUBLIC_PROXE_SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY) in your .env.local file')
+    console.error('   Check: http://localhost:3000/api/status for connection diagnostics')
+  } else {
+    // Validate URL format
+    if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
+      console.error('❌ Invalid Supabase URL format:', supabaseUrl)
+      console.error('   Expected format: https://your-project.supabase.co')
+    }
+    
+    // Validate key format (should be a JWT-like string)
+    if (supabaseAnonKey.length < 50) {
+      console.error('❌ Supabase anon key appears invalid (too short):', supabaseAnonKey.substring(0, 20) + '...')
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ Supabase client initialized:', {
+        url: supabaseUrl.substring(0, 30) + '...',
+        anonKeySet: !!supabaseAnonKey,
+        anonKeyLength: supabaseAnonKey.length,
+      })
+    }
   }
   
   // AUTHENTICATION DISABLED - Clear any rate limit flags

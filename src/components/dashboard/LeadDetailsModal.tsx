@@ -181,10 +181,55 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
     hasBooking: false,
   })
   const [previousScore, setPreviousScore] = useState<number | null>(null)
+  const [freshLeadData, setFreshLeadData] = useState<Lead | null>(null)
+
+  // Fetch fresh lead data from database when modal opens
+  const loadFreshLeadData = async () => {
+    if (!lead) return
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('all_leads')
+        .select('id, customer_name, email, phone, created_at, last_interaction_at, booking_date, booking_time, lead_score, lead_stage, sub_stage, stage_override, unified_context, first_touchpoint, last_touchpoint, status')
+        .eq('id', lead.id)
+        .single()
+
+      if (error) {
+        console.error('Error fetching fresh lead data:', error)
+        return
+      }
+
+      if (data) {
+        // Merge fresh data with existing lead prop
+        const mergedLead: Lead = {
+          ...lead,
+          name: data.customer_name || lead.name,
+          email: data.email || lead.email,
+          phone: data.phone || lead.phone,
+          timestamp: data.created_at || lead.timestamp,
+          last_interaction_at: data.last_interaction_at || lead.last_interaction_at || null,
+          booking_date: data.booking_date || lead.booking_date || data.unified_context?.web?.booking_date || data.unified_context?.whatsapp?.booking_date || null,
+          booking_time: data.booking_time || lead.booking_time || data.unified_context?.web?.booking_time || data.unified_context?.whatsapp?.booking_time || null,
+          lead_score: data.lead_score ?? lead.lead_score ?? null,
+          lead_stage: data.lead_stage || lead.lead_stage || null,
+          sub_stage: data.sub_stage || lead.sub_stage || null,
+          stage_override: data.stage_override ?? lead.stage_override ?? null,
+          unified_context: data.unified_context || lead.unified_context || null,
+          first_touchpoint: data.first_touchpoint || lead.first_touchpoint || null,
+          last_touchpoint: data.last_touchpoint || lead.last_touchpoint || null,
+          status: data.status || lead.status || null,
+        }
+        setFreshLeadData(mergedLead)
+      }
+    } catch (error) {
+      console.error('Error loading fresh lead data:', error)
+    }
+  }
 
   // Load all data when lead changes
   useEffect(() => {
     if (lead && isOpen) {
+      loadFreshLeadData()
       loadUnifiedSummary()
       loadActivities()
       loadChannelData()
@@ -276,6 +321,13 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
         .eq('lead_id', lead.id)
         .order('created_at', { ascending: true })
 
+      // Fetch fresh lead data to check booking
+      const { data: leadData } = await supabase
+        .from('all_leads')
+        .select('booking_date, booking_time, unified_context')
+        .eq('id', lead.id)
+        .single()
+
       if (messages && Array.isArray(messages) && messages.length > 0) {
         const customerMessages = messages.filter((m: any) => m.sender === 'customer').length
         const responseRate = Math.round((customerMessages / messages.length) * 100)
@@ -294,11 +346,39 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
         }
         const avgResponseTime = responseCount > 0 ? Math.round(totalResponseTime / responseCount / 60000) : 0 // in minutes
 
+        // Check booking from multiple sources - prioritize fresh data
+        const unifiedContext = leadData?.unified_context || lead.unified_context
+        const hasBooking = !!(
+          leadData?.booking_date ||
+          lead.booking_date || 
+          unifiedContext?.web?.booking_date || 
+          unifiedContext?.whatsapp?.booking_date ||
+          unifiedContext?.voice?.booking_date ||
+          unifiedContext?.social?.booking_date
+        )
+
         setQuickStats({
           totalMessages: messages.length,
           responseRate,
           avgResponseTime,
-          hasBooking: !!lead.booking_date,
+          hasBooking,
+        })
+      } else {
+        // Even with no messages, check for booking
+        const unifiedContext = leadData?.unified_context || lead.unified_context
+        const hasBooking = !!(
+          leadData?.booking_date ||
+          lead.booking_date || 
+          unifiedContext?.web?.booking_date || 
+          unifiedContext?.whatsapp?.booking_date ||
+          unifiedContext?.voice?.booking_date ||
+          unifiedContext?.social?.booking_date
+        )
+        setQuickStats({
+          totalMessages: 0,
+          responseRate: 0,
+          avgResponseTime: 0,
+          hasBooking,
         })
       }
     } catch (error) {
@@ -328,15 +408,25 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
 
   if (!isOpen || !lead) return null
 
-  // Calculate days in pipeline
-  const daysInPipeline = Math.floor((new Date().getTime() - new Date(lead.timestamp).getTime()) / (1000 * 60 * 60 * 24))
+  // Use fresh lead data if available, otherwise fall back to prop
+  const currentLead = freshLeadData || lead
 
-  // Calculate days inactive
-  const lastInteraction: string | null = lead.last_interaction_at || lead.unified_context?.last_interaction_at || lead.timestamp || null
+  // Calculate days in pipeline
+  const daysInPipeline = Math.floor((new Date().getTime() - new Date(currentLead.timestamp).getTime()) / (1000 * 60 * 60 * 24))
+
+  // Calculate days inactive - prioritize all_leads.last_interaction_at, then check unified_context channels
+  const lastInteraction: string | null = 
+    currentLead.last_interaction_at || 
+    currentLead.unified_context?.whatsapp?.last_interaction ||
+    currentLead.unified_context?.web?.last_interaction ||
+    currentLead.unified_context?.voice?.last_interaction ||
+    currentLead.unified_context?.social?.last_interaction ||
+    currentLead.timestamp || 
+    null
   const daysInactive = lastInteraction ? Math.floor((new Date().getTime() - new Date(lastInteraction).getTime()) / (1000 * 60 * 60 * 24)) : 0
 
   // Get health score and color
-  const score = lead.lead_score ?? 0
+  const score = currentLead.lead_score ?? 0
   const getHealthColor = (score: number) => {
     if (score >= 70) return { bg: '#EF4444', text: '#FFFFFF', label: 'Hot' }
     if (score >= 40) return { bg: '#F97316', text: '#FFFFFF', label: 'Warm' }
@@ -356,19 +446,19 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
 
   // Auto-detect stage from conversation
   const autoDetectStage = (): string => {
-    if (lead.lead_stage && !lead.stage_override) {
-      return lead.lead_stage
+    if (currentLead.lead_stage && !currentLead.stage_override) {
+      return currentLead.lead_stage
     }
     
     // Simple auto-detection based on score and activity
-    if (score >= 86 || lead.booking_date) return 'Booking Made'
+    if (score >= 86 || currentLead.booking_date) return 'Booking Made'
     if (score >= 61) return 'High Intent'
     if (score >= 31) return 'Qualified'
     if (quickStats.totalMessages > 3) return 'Engaged'
     return 'New'
   }
   const detectedStage = autoDetectStage()
-  const currentStage = lead.lead_stage || detectedStage
+  const currentStage = currentLead.lead_stage || detectedStage
 
   // Calculate stage duration
   const getStageDuration = () => {
@@ -407,7 +497,7 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
 
   // Handle stage change
   const handleStageChange = (newStage: LeadStage) => {
-    const oldStage: string | null = lead.lead_stage || null
+    const oldStage: string | null = currentLead.lead_stage || null
     setPendingStageChange({ oldStage, newStage })
     setShowStageDropdown(false)
     setShowActivityModal(true)
@@ -442,22 +532,32 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
       const supabase = createClient()
       const { data } = await supabase
         .from('all_leads')
-        .select('lead_stage, sub_stage, lead_score, stage_override')
+        .select('lead_stage, sub_stage, lead_score, stage_override, last_interaction_at, booking_date, booking_time, unified_context')
         .eq('id', lead.id)
         .single()
       
       if (data) {
         const leadData = data as any
-        Object.assign(lead, {
-          lead_stage: leadData.lead_stage,
-          sub_stage: leadData.sub_stage,
-          lead_score: leadData.lead_score,
-          stage_override: leadData.stage_override
+        // Update fresh lead data state
+        setFreshLeadData((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            lead_stage: leadData.lead_stage,
+            sub_stage: leadData.sub_stage,
+            lead_score: leadData.lead_score,
+            stage_override: leadData.stage_override,
+            last_interaction_at: leadData.last_interaction_at || prev.last_interaction_at,
+            booking_date: leadData.booking_date || leadData.unified_context?.web?.booking_date || leadData.unified_context?.whatsapp?.booking_date || prev.booking_date,
+            booking_time: leadData.booking_time || leadData.unified_context?.web?.booking_time || leadData.unified_context?.whatsapp?.booking_time || prev.booking_time,
+            unified_context: leadData.unified_context || prev.unified_context,
+          }
         })
       }
 
       setShowActivityModal(false)
       setPendingStageChange(null)
+      loadFreshLeadData() // Reload fresh data
       loadUnifiedSummary()
       loadActivities()
     } catch (err) {
@@ -502,8 +602,8 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
           {/* Modal Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-[#262626]">
             <div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">{lead.name}</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{lead.email || lead.phone || 'No contact info'}</p>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">{currentLead.name}</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{currentLead.email || currentLead.phone || 'No contact info'}</p>
             </div>
             <button
               onClick={onClose}
@@ -660,11 +760,19 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
                     <div className="flex items-center gap-2">
                       <MdCheckCircle className="text-green-500" size={24} />
                       <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {formatDateIST(lead.booking_date)}
+                        {formatDateIST(
+                          currentLead.booking_date || 
+                          currentLead.unified_context?.web?.booking_date || 
+                          currentLead.unified_context?.whatsapp?.booking_date
+                        )}
                       </p>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {formatBookingTime(lead.booking_time)}
+                      {formatBookingTime(
+                        currentLead.booking_time || 
+                        currentLead.unified_context?.web?.booking_time || 
+                        currentLead.unified_context?.whatsapp?.booking_time
+                      )}
                     </p>
                   </>
                 ) : (
@@ -886,7 +994,7 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
                 <div className="p-4 rounded-lg bg-gray-50 dark:bg-[#1F1F1F]">
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     Score is calculated automatically based on engagement, intent signals, and activity patterns.
-                    {lead.last_scored_at && ` Last updated: ${formatDateTimeIST(lead.last_scored_at)}`}
+                    {currentLead.last_scored_at && ` Last updated: ${formatDateTimeIST(currentLead.last_scored_at)}`}
                   </p>
                 </div>
               </div>
@@ -904,7 +1012,7 @@ export default function LeadDetailsModal({ lead, isOpen, onClose, onStatusUpdate
             setPendingStageChange(null)
           }}
           onSave={handleActivitySave}
-          leadName={lead.name || 'Lead'}
+          leadName={currentLead.name || 'Lead'}
           stageChange={{
             oldStage: pendingStageChange.oldStage,
             newStage: pendingStageChange.newStage

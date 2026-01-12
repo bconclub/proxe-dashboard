@@ -1,6 +1,5 @@
-// AUTHENTICATION DISABLED
-// import { redirect } from 'next/navigation'
-// import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import DashboardLayout from '@/components/dashboard/DashboardLayout'
 import ThemeProvider from '@/components/dashboard/ThemeProvider'
 
@@ -11,93 +10,84 @@ export default async function Layout({
 }: {
   children: React.ReactNode
 }) {
-  // AUTHENTICATION DISABLED - Dashboard is now public access
-  // const supabase = await createClient()
-  // const {
-  //   data: { user },
-  //   error,
-  // } = await supabase.auth.getUser()
-
-  // // Debug logging
-  // if (process.env.NODE_ENV === 'development') {
-  //   console.log('🔍 Dashboard layout auth check:', {
-  //     hasUser: !!user,
-  //     hasSession: !!session,
-  //     userEmail: user?.email,
-  //     error: error?.message,
-  //     errorStatus: (error as any)?.status,
-  //   })
+  // DEVELOPMENT BYPASS: Uncomment to bypass auth in development
+  // if (process.env.NODE_ENV === 'development' && process.env.BYPASS_AUTH === 'true') {
+  //   console.warn('⚠️ AUTH BYPASSED: Development mode with BYPASS_AUTH=true')
+  //   return (
+  //     <ThemeProvider>
+  //       <DashboardLayout>{children}</DashboardLayout>
+  //     </ThemeProvider>
+  //   )
   // }
 
-  // // If we have a session but getUser failed, wait a moment and retry
-  // // This handles the case where cookies are being synced
-  // if (session && !user && !error) {
-  //   console.log('⚠️ Dashboard layout: Session exists but user not found, waiting...')
-  //   // Wait a bit for cookies to sync
-  //   await new Promise(resolve => setTimeout(resolve, 100))
-  //   const retry = await supabase.auth.getUser()
-  //   if (retry.data?.user) {
-  //     // User found on retry, continue
-  //     return (
-  //       <ThemeProvider>
-  //         <DashboardLayout>{children}</DashboardLayout>
-  //       </ThemeProvider>
-  //     )
-  //   }
-  // }
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
 
-  // // Handle rate limit errors - don't redirect, just show error
-  // if (error) {
-  //   const errorStatus = (error as any).status
-  //   if (errorStatus === 429) {
-  //     console.warn('🚫 Dashboard layout: Rate limited, allowing access with degraded experience')
-  //     // Allow access but user might have limited functionality
-  //   } else if (errorStatus === 400) {
-  //     // Invalid session - redirect to login
-  //     console.warn('🚫 Dashboard layout: Invalid session (400), redirecting to login')
-  //     redirect('/auth/login')
-  //   } else if (!user && !session) {
-  //     // Only redirect if we have neither user nor session
-  //     console.warn('🚫 Dashboard layout: No user and no session, redirecting to login')
-  //     redirect('/auth/login')
-  //   }
-  // }
+    // Debug logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Dashboard layout auth check:', {
+        hasUser: !!user,
+        userEmail: user?.email,
+        error: error?.message,
+        errorStatus: (error as any)?.status,
+        willRedirect: !user && (error || !error),
+      })
+      
+      // Log if we're about to redirect
+      if (!user) {
+        console.warn('⚠️ Dashboard layout: About to redirect to login because:', {
+          hasError: !!error,
+          errorMessage: error?.message,
+          errorStatus: (error as any)?.status,
+        })
+      }
+    }
 
-  // // Only redirect if we have no user AND no session AND it's not a rate limit
-  // // Give it a moment - cookies might still be syncing
-  // if (!user && !session && !error) {
-  //   // In development, log but don't redirect immediately
-  //   // The client-side will handle the redirect if needed
-  //   if (process.env.NODE_ENV === 'development') {
-  //     console.warn('⚠️ Dashboard layout: No user, no session - but allowing access (client will check)')
-  //     // Don't redirect - let client-side handle it
-  //   } else {
-  //     console.warn('🚫 Dashboard layout: No user, no session, and no error, redirecting to login')
-  //     redirect('/auth/login')
-  //   }
-  // }
+    // Handle errors gracefully
+    if (error) {
+      const errorStatus = (error as any)?.status
+      
+      // Rate limit - allow access but log warning
+      if (errorStatus === 429) {
+        console.warn('🚫 Dashboard layout: Rate limited, allowing access with degraded experience')
+        // Continue - allow access even if rate limited
+      } 
+      // Invalid session or unauthorized - redirect to login
+      else if (errorStatus === 400 || errorStatus === 401) {
+        console.warn('🚫 Dashboard layout: Invalid session, redirecting to login')
+        redirect('/auth/login')
+      }
+      // Other errors - log but don't block in development
+      else if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Dashboard layout: Auth error but allowing in dev mode:', error.message)
+      } else {
+        // In production, redirect on auth errors
+        console.warn('🚫 Dashboard layout: Auth error, redirecting to login')
+        redirect('/auth/login')
+      }
+    }
 
-  return (
-    <ThemeProvider>
-      <DashboardLayout>{children}</DashboardLayout>
-    </ThemeProvider>
-  )
-  
-  // OLD ERROR HANDLING (commented out)
-  // } catch (error) {
-  //   console.error('Dashboard layout error:', error)
-  //   // Don't redirect on rate limit errors
-  //   const errorMessage = error instanceof Error ? error.message : String(error)
-  //   if (errorMessage.includes('429') || errorMessage.includes('rate limit')) {
-  //     console.warn('🚫 Dashboard layout: Rate limit error, allowing access')
-  //     return (
-  //       <ThemeProvider>
-  //         <DashboardLayout>{children}</DashboardLayout>
-  //       </ThemeProvider>
-  //     )
-  //   }
-  //   redirect('/auth/login')
-  // }
+    // If no user and no error, redirect to login
+    if (!user && !error) {
+      console.warn('🚫 Dashboard layout: No user found, redirecting to login')
+      redirect('/auth/login')
+    }
+
+    // User is authenticated, render dashboard
+    return (
+      <ThemeProvider>
+        <DashboardLayout>{children}</DashboardLayout>
+      </ThemeProvider>
+    )
+  } catch (error) {
+    console.error('Dashboard layout error:', error)
+    // On unexpected errors, redirect to login
+    redirect('/auth/login')
+  }
 }
 
 

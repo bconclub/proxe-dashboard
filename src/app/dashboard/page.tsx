@@ -1,22 +1,22 @@
-// AUTHENTICATION DISABLED
-// import { redirect } from 'next/navigation'
-// import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import InsightsCharts from '@/components/dashboard/InsightsCharts'
 import LeadsTable from '@/components/dashboard/LeadsTable'
 import RecentBookings from '@/components/dashboard/RecentBookings'
 
 export default async function DashboardPage() {
   try {
-    // AUTHENTICATION DISABLED - Dashboard is now public access
-    // const supabase = await createClient()
-    // const {
-    //   data: { user },
-    // } = await supabase.auth.getUser()
+    // Auth check is handled in layout, but double-check here
+    const supabase = await createClient()
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
 
-    // if (!user) {
-    //   // Redirect handled by middleware, but just in case
-    //   redirect('/auth/login')
-    // }
+    if (error || !user) {
+      // Redirect handled by middleware/layout, but just in case
+      redirect('/auth/login')
+    }
 
     return (
     <div className="space-y-6">

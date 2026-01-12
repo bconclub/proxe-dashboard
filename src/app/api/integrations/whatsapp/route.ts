@@ -4,8 +4,9 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 
 // Service role client for webhooks (bypasses RLS)
 const getServiceClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_PROXE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseUrl,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: {

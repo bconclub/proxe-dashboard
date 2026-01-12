@@ -133,9 +133,9 @@ export async function GET(request: NextRequest) {
       isSet: !!process.env[key],
     }))
 
-    // Check Supabase Configuration
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    // Check Supabase Configuration (support both PROXE-prefixed and standard)
+    const supabaseUrl = process.env.NEXT_PUBLIC_PROXE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+    const anonKey = process.env.NEXT_PUBLIC_PROXE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     status.supabaseConfig.url = supabaseUrl || null

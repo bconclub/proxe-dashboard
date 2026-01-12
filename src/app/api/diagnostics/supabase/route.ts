@@ -70,9 +70,9 @@ export async function GET() {
     recommendations: [],
   }
 
-  // 1. Check Configuration
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  // 1. Check Configuration (support both PROXE-prefixed and standard)
+  const supabaseUrl = process.env.NEXT_PUBLIC_PROXE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_PROXE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   result.supabaseConfig.url = supabaseUrl || null

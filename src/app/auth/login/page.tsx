@@ -217,12 +217,47 @@ export default function LoginPage() {
               
               if (syncResponse.ok) {
                 console.log('✅ Session synced to cookies, redirecting...')
-                // Wait a moment for cookies to be set
-                await new Promise(resolve => setTimeout(resolve, 200))
+                console.log('✅ Sync result:', result)
+                
+                // Verify session is still available on client
+                const { data: { user: verifyUser } } = await supabase.auth.getUser()
+                if (!verifyUser) {
+                  console.error('❌ Session lost after sync, retrying...')
+                  // Retry sync once
+                  try {
+                    const retryResponse = await fetch('/api/auth/sync-session', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        access_token: data.session.access_token,
+                        refresh_token: data.session.refresh_token,
+                        expires_at: data.session.expires_at,
+                        expires_in: data.session.expires_in,
+                        token_type: data.session.token_type,
+                        user: data.session.user,
+                      }),
+                      credentials: 'include',
+                    })
+                    if (retryResponse.ok) {
+                      console.log('✅ Retry sync successful')
+                    }
+                  } catch (retryError) {
+                    console.error('❌ Retry sync failed:', retryError)
+                  }
+                }
+                
+                // Wait for cookies to be set and propagated
+                await new Promise(resolve => setTimeout(resolve, 500))
+                
+                // Use window.location for full page reload to ensure cookies are read
+                // This is more reliable than router.push for auth redirects
                 window.location.href = '/dashboard'
               } else {
                 console.warn('⚠️ Sync failed:', result)
-                // Still redirect - client-side check will handle it
+                console.warn('⚠️ Still redirecting - client session exists, server may not have cookies yet')
+                // Wait a bit before redirecting
+                await new Promise(resolve => setTimeout(resolve, 500))
+                // Use window.location for full reload
                 window.location.href = '/dashboard'
               }
             } catch (error) {
