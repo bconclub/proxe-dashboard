@@ -103,7 +103,7 @@ function AcceptInviteForm() {
     if (authData.user) {
       const { error: updateError } = await supabase
         .from('user_invitations')
-        .update({ accepted_at: new Date().toISOString() })
+        .update({ accepted_at: new Date().toISOString() } as any)
         .eq('token', token)
 
       if (updateError) {
@@ -113,7 +113,7 @@ function AcceptInviteForm() {
       // Update dashboard_user role
       const { error: roleError } = await supabase
         .from('dashboard_users')
-        .update({ role: invitation.role })
+        .update({ role: invitation.role } as any)
         .eq('id', authData.user.id)
 
       if (roleError) {
