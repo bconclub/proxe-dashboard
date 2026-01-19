@@ -478,9 +478,18 @@ export default function InboxPage() {
         throw error
       }
       
-      const messagesData = (data ?? []) as Array<{ channel?: string | null }>
+      const messagesData = (data ?? []).map((msg: any): Message => ({
+        id: String(msg?.id ?? ''),
+        lead_id: String(msg?.lead_id ?? ''),
+        channel: String(msg?.channel ?? ''),
+        sender: (msg?.sender ?? 'system') as Message['sender'],
+        content: String(msg?.content ?? ''),
+        message_type: String(msg?.message_type ?? ''),
+        metadata: msg?.metadata ?? null,
+        created_at: String(msg?.created_at ?? ''),
+      }))
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/ccc34e9d-10fc-4755-9d86-188049e8d67e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inbox/page.tsx:481',message:'fetchMessages result',data:{count:messagesData.length,hasFirst:!!messagesData[0],firstKeys:messagesData[0]?Object.keys(messagesData[0]).slice(0,5):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'inbox-msg',hypothesisId:'H10'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7244/ingest/ccc34e9d-10fc-4755-9d86-188049e8d67e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inbox/page.tsx:481',message:'fetchMessages result',data:{count:messagesData.length,hasFirst:!!messagesData[0],firstKeys:messagesData[0]?Object.keys(messagesData[0]).slice(0,5):[],firstValues:messagesData[0]?{lead_id:messagesData[0].lead_id,channel:messagesData[0].channel,created_at:messagesData[0].created_at}:{}},timestamp:Date.now(),sessionId:'debug-session',runId:'inbox-msg',hypothesisId:'H10'})}).catch(()=>{});
       // #endregion agent log
       console.log('Fetched messages:', messagesData.length, 'messages')
       if (messagesData.length > 0) {
