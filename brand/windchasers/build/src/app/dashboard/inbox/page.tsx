@@ -245,7 +245,7 @@ export default function InboxPage() {
         if (!leadsError && activeLeads && activeLeads.length > 0) {
           console.log('Found active leads as fallback:', activeLeads.length)
           // Create conversations from leads (even without messages)
-          const fallbackConversations: Conversation[] = activeLeads.map(lead => {
+          const fallbackConversations: Conversation[] = activeLeads.map((lead: any) => {
             const channels: string[] = []
             if (lead.first_touchpoint) channels.push(lead.first_touchpoint)
             if (lead.last_touchpoint && !channels.includes(lead.last_touchpoint)) {
