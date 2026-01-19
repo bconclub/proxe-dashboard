@@ -265,45 +265,46 @@ export async function GET(request: NextRequest) {
     })
 
     // 3. Response Health (avg response time in seconds)
-    let totalResponseTime = 0
-    let responseCount = 0
+    // Calculate from conversations table using input_to_output_gap_ms
+    // Filter: channel IN ('web', 'whatsapp') AND sender = 'agent'
+    // SQL equivalent: SELECT AVG((metadata->>'input_to_output_gap_ms')::numeric / 1000) as avg_response_seconds
+    //                 FROM conversations
+    //                 WHERE channel IN ('web', 'whatsapp') AND sender = 'agent'
+    //                 AND metadata->>'input_to_output_gap_ms' IS NOT NULL
+    let avgResponseTimeSeconds = 0
     
-    if (messages) {
-      messages.forEach((msg: any) => {
-        if (msg.sender === 'agent' && msg.metadata?.response_time_ms) {
-          const responseTimeMs = typeof msg.metadata.response_time_ms === 'number' 
-            ? msg.metadata.response_time_ms 
-            : parseInt(msg.metadata.response_time_ms, 10)
-          if (!isNaN(responseTimeMs) && responseTimeMs > 0) {
-            totalResponseTime += responseTimeMs / 1000 // Convert to seconds
-            responseCount++
-          }
-        }
-      })
+    try {
+      const { data: conversationsForResponse, error: convError } = await supabase
+        .from('conversations')
+        .select('metadata')
+        .in('channel', ['web', 'whatsapp'])
+        .eq('sender', 'agent')
+        .not('metadata->input_to_output_gap_ms', 'is', null)
       
-      // Fallback to timestamp calculation
-      if (responseCount === 0) {
-        const leadMessages: Record<string, any[]> = {}
-        messages.forEach((msg: any) => {
-          if (!leadMessages[msg.lead_id]) leadMessages[msg.lead_id] = []
-          leadMessages[msg.lead_id].push(msg)
-        })
+      if (!convError && conversationsForResponse && conversationsForResponse.length > 0) {
+        let totalGapMs = 0
+        let validCount = 0
         
-        Object.values(leadMessages).forEach((leadMsgs: any[]) => {
-          for (let i = 0; i < leadMsgs.length - 1; i++) {
-            if (leadMsgs[i].sender === 'customer' && leadMsgs[i + 1].sender === 'agent') {
-              const timeDiff = (new Date(leadMsgs[i + 1].created_at).getTime() - new Date(leadMsgs[i].created_at).getTime()) / 1000
-              if (timeDiff > 0) {
-                totalResponseTime += timeDiff
-                responseCount++
-              }
+        conversationsForResponse.forEach((conv: any) => {
+          const gapMs = conv.metadata?.input_to_output_gap_ms
+          if (gapMs !== null && gapMs !== undefined) {
+            const gapMsNum = typeof gapMs === 'number' ? gapMs : parseFloat(gapMs)
+            if (!isNaN(gapMsNum) && gapMsNum > 0) {
+              totalGapMs += gapMsNum
+              validCount++
             }
           }
         })
+        
+        if (validCount > 0) {
+          avgResponseTimeSeconds = (totalGapMs / validCount) / 1000 // Convert ms to seconds
+        }
+      } else if (convError) {
+        console.warn('Error fetching conversations for response time:', convError)
       }
+    } catch (error) {
+      console.warn('Error calculating avg response time:', error)
     }
-    
-    const avgResponseTimeSeconds = responseCount > 0 ? totalResponseTime / responseCount : 0
 
     // 5. Leads Needing Attention (high score, recent interaction)
     const leadsNeedingAttention = safeLeads
@@ -719,20 +720,23 @@ export async function GET(request: NextRequest) {
       hotLeadsTrend.push({ value: dayHotLeads })
       
       // Response time trend (daily average)
+      // Use input_to_output_gap_ms from conversations table
       const dayMessages = messages?.filter(m => {
         const msgDate = new Date(m.created_at).toISOString().split('T')[0]
-        return msgDate === dateStr && m.sender === 'agent'
+        return msgDate === dateStr && 
+               m.sender === 'agent' && 
+               (m.channel === 'web' || m.channel === 'whatsapp')
       }) || []
       
       let dayTotalResponse = 0
       let dayResponseCount = 0
       dayMessages.forEach((msg: any) => {
-        if (msg.metadata?.response_time_ms) {
-          const responseTimeMs = typeof msg.metadata.response_time_ms === 'number' 
-            ? msg.metadata.response_time_ms 
-            : parseInt(msg.metadata.response_time_ms, 10)
-          if (!isNaN(responseTimeMs) && responseTimeMs > 0) {
-            dayTotalResponse += responseTimeMs / 1000
+        if (msg.metadata?.input_to_output_gap_ms) {
+          const gapMs = typeof msg.metadata.input_to_output_gap_ms === 'number' 
+            ? msg.metadata.input_to_output_gap_ms 
+            : parseFloat(msg.metadata.input_to_output_gap_ms)
+          if (!isNaN(gapMs) && gapMs > 0) {
+            dayTotalResponse += gapMs / 1000 // Convert ms to seconds
             dayResponseCount++
           }
         }
@@ -1009,15 +1013,22 @@ export async function GET(request: NextRequest) {
         : 0
 
       // Daily avg response time
+      // Use input_to_output_gap_ms from conversations table
+      // Filter: channel IN ('web', 'whatsapp') AND sender = 'agent'
+      const dailyAgentMessages = dailyMessages.filter((msg: any) => 
+        msg.sender === 'agent' && 
+        (msg.channel === 'web' || msg.channel === 'whatsapp')
+      )
+      
       let dailyTotalResponseTime = 0
       let dailyResponseCount = 0
-      dailyMessages.forEach((msg: any) => {
-        if (msg.sender === 'agent' && msg.metadata?.response_time_ms) {
-          const responseTimeMs = typeof msg.metadata.response_time_ms === 'number'
-            ? msg.metadata.response_time_ms
-            : parseInt(msg.metadata.response_time_ms, 10)
-          if (!isNaN(responseTimeMs) && responseTimeMs > 0) {
-            dailyTotalResponseTime += responseTimeMs / 1000 // Convert to seconds
+      dailyAgentMessages.forEach((msg: any) => {
+        if (msg.metadata?.input_to_output_gap_ms) {
+          const gapMs = typeof msg.metadata.input_to_output_gap_ms === 'number'
+            ? msg.metadata.input_to_output_gap_ms
+            : parseFloat(msg.metadata.input_to_output_gap_ms)
+          if (!isNaN(gapMs) && gapMs > 0) {
+            dailyTotalResponseTime += gapMs / 1000 // Convert ms to seconds
             dailyResponseCount++
           }
         }
