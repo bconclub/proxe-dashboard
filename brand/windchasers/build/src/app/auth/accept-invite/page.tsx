@@ -36,18 +36,29 @@ function AcceptInviteForm() {
         return
       }
 
-      if (data.accepted_at) {
+      // Type assertion for invitation data
+      const invitationData = data as {
+        id: string
+        email: string
+        token: string
+        role: string
+        accepted_at: string | null
+        expires_at: string
+        created_at: string
+      }
+
+      if (invitationData.accepted_at) {
         setError('This invitation has already been accepted')
         return
       }
 
-      if (new Date(data.expires_at) < new Date()) {
+      if (new Date(invitationData.expires_at) < new Date()) {
         setError('This invitation has expired')
         return
       }
 
-      setInvitation(data)
-      setEmail(data.email)
+      setInvitation(invitationData)
+      setEmail(invitationData.email)
     }
 
     verifyInvitation()
