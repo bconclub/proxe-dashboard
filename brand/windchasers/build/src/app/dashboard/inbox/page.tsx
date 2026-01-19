@@ -384,9 +384,19 @@ export default function InboxPage() {
       // Build final conversations array
       const conversationsArray: Conversation[] = []
 
+      const typedLeads = (leadsData ?? []) as Array<{
+        id: string | number
+        customer_name?: string | null
+        email?: string | null
+        phone?: string | null
+      }>
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/ccc34e9d-10fc-4755-9d86-188049e8d67e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inbox/page.tsx:387',message:'typed leads prepared',data:{leadCount:typedLeads.length,hasFirst:!!typedLeads[0],firstKeys:typedLeads[0]?Object.keys(typedLeads[0]).slice(0,5):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'inbox-msg',hypothesisId:'H9'})}).catch(()=>{});
+      // #endregion agent log
+
       for (const [leadId, convData] of conversationMap) {
         // Find matching lead - ensure we're comparing strings
-        const lead = leadsData?.find((l: any) => String(l.id) === String(leadId))
+        const lead = typedLeads.find((l) => String(l.id) === String(leadId))
         
         const conversation: Conversation = {
           lead_id: leadId,
