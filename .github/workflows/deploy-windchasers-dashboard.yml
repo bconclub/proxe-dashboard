@@ -57,13 +57,26 @@ jobs:
               echo "⚠️  Warning: .env.local not found on VPS. Please create it manually."
             fi
             
-            # Install dependencies (production)
+            # Install dependencies (need dev deps for build)
             echo "📦 Installing dependencies..."
-            npm ci --production
+            npm ci
             
             # Build the application
             echo "🏗️  Building Next.js application..."
             npm run build
+            
+            # Verify build succeeded
+            if [ ! -d ".next" ]; then
+              echo "❌ ERROR: Build failed - .next directory not found!"
+              exit 1
+            fi
+            
+            if [ ! -f ".next/BUILD_ID" ]; then
+              echo "❌ ERROR: Build failed - BUILD_ID not found!"
+              exit 1
+            fi
+            
+            echo "✅ Build successful - .next directory exists"
             
             # Restart or start with PM2
             echo "🔄 Restarting application with PM2..."
