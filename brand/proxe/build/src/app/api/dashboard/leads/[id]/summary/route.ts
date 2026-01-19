@@ -516,7 +516,9 @@ Generate the summary in the exact format specified above. Make it concise and ac
               attribution = `Last updated by ${actorName} ${timeAgo} - ${action}`
             } else if (recentActivities && recentActivities.length > 0) {
               const latestActivity = recentActivities[0]
-              const creator = latestActivity.dashboard_users
+              const creator = Array.isArray(latestActivity.dashboard_users) 
+                ? latestActivity.dashboard_users[0] 
+                : latestActivity.dashboard_users
               const actorName = creator?.name || creator?.email || 'Team Member'
               const timeAgo = formatTimeAgo(latestActivity.created_at)
               attribution = `Last updated by ${actorName} ${timeAgo} - ${latestActivity.activity_type}`
