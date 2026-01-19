@@ -58,16 +58,9 @@ export async function POST(request: NextRequest) {
     //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     // }
 
-    // Verify user is admin
-    const { data: dashboardUser } = await supabase
-      .from('dashboard_users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (!dashboardUser || dashboardUser.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
-    }
+    // Admin check disabled since auth is disabled
+    // Use system user ID for tracking
+    const systemUserId = 'system'
 
     const body = await request.json()
     const { style } = body
@@ -87,7 +80,7 @@ export async function POST(request: NextRequest) {
           key: 'widget_style',
           value: { style },
           description: 'Widget style preference: searchbar or bubble',
-          updated_by: user.id,
+          updated_by: systemUserId,
         },
         {
           onConflict: 'key',
