@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 
 // Make this route public - no authentication required
 export const dynamic = 'force-dynamic'
@@ -16,36 +16,123 @@ export default function WidgetPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [serverAvailable, setServerAvailable] = useState<boolean | null>(null)
   const [showFallback, setShowFallback] = useState(true)
+  const [retryCount, setRetryCount] = useState(0)
+  const [isRetrying, setIsRetrying] = useState(false)
 
-  useEffect(() => {
-    // Get the web-agent URL from environment or use default
-    const agentUrl = process.env.NEXT_PUBLIC_WEB_AGENT_URL || 'http://localhost:3001'
-    const url = `${agentUrl}/widget`
-    setWidgetUrl(url)
-    
-    // Check if server is available with timeout
-    const checkServer = async () => {
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 2000)
-        
-        await fetch(url, { 
-          method: 'HEAD', 
-          mode: 'no-cors',
-          signal: controller.signal
-        })
-        clearTimeout(timeoutId)
+  const checkServer = useCallback(async () => {
+    if (!widgetUrl) {
+      setIsLoading(false)
+      setIsRetrying(false)
+      return
+    }
+
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000) // Increased timeout for production
+      
+      // Check if URL is same origin (no CORS issues)
+      const isSameOrigin = typeof window !== 'undefined' && 
+        (widgetUrl.startsWith(window.location.origin) || 
+         widgetUrl.includes('localhost') || 
+         widgetUrl.includes('127.0.0.1'))
+      
+      if (isSameOrigin) {
+        try {
+          // Try to fetch the widget page
+          const response = await fetch(widgetUrl, { 
+            method: 'GET', 
+            mode: 'cors',
+            signal: controller.signal,
+            cache: 'no-cache',
+            credentials: 'include'
+          })
+          clearTimeout(timeoutId)
+          
+          if (response.ok) {
+            setServerAvailable(true)
+            setShowFallback(false)
+          } else {
+            setServerAvailable(false)
+            setShowFallback(true)
+          }
+        } catch (fetchError) {
+          clearTimeout(timeoutId)
+          // For production domains, assume available and let iframe handle it
+          // (might be CORS or network issue, but widget might still load)
+          if (widgetUrl.includes('windchasers.in')) {
+            setServerAvailable(true)
+            setShowFallback(false)
+          } else {
+            setServerAvailable(false)
+            setShowFallback(true)
+          }
+        }
+      } else {
+        // For cross-origin URLs, assume available and let iframe handle it
         setServerAvailable(true)
         setShowFallback(false)
-      } catch (error) {
+      }
+    } catch (error) {
+      console.log('Server check error:', error)
+      // For production, still try to load the iframe
+      if (widgetUrl.includes('windchasers.in')) {
+        setServerAvailable(true)
+        setShowFallback(false)
+      } else {
         setServerAvailable(false)
         setShowFallback(true)
       }
+    } finally {
+      setIsLoading(false)
+      setIsRetrying(false)
+    }
+  }, [widgetUrl])
+
+  useEffect(() => {
+    // Determine the web-agent URL
+    let agentUrl: string
+    
+    // Check if we have an environment variable set
+    if (process.env.NEXT_PUBLIC_WEB_AGENT_URL) {
+      agentUrl = process.env.NEXT_PUBLIC_WEB_AGENT_URL
+    } else {
+      // Auto-detect based on current location
+      if (typeof window !== 'undefined') {
+        const currentHost = window.location.hostname
+        const currentProtocol = window.location.protocol
+        
+        // If we're on production domain (proxe.windchasers.in), use same domain
+        if (currentHost.includes('windchasers.in') || currentHost.includes('proxe.windchasers.in')) {
+          // Use same domain and protocol, but check if web-agent is on a subdomain or same domain
+          // Try same domain first (most common setup)
+          agentUrl = `${currentProtocol}//${currentHost}`
+        } else {
+          // Development - use localhost
+          agentUrl = 'http://localhost:3001'
+        }
+      } else {
+        // Server-side fallback
+        agentUrl = 'http://localhost:3001'
+      }
     }
     
-    checkServer()
-    setIsLoading(false)
+    // Construct widget URL
+    const url = agentUrl.endsWith('/widget') ? agentUrl : `${agentUrl}/widget`
+    setWidgetUrl(url)
   }, [])
+
+  // Separate effect to check server when widgetUrl is set
+  useEffect(() => {
+    if (widgetUrl) {
+      checkServer()
+    }
+  }, [widgetUrl, checkServer])
+
+  const handleRetry = () => {
+    setIsRetrying(true)
+    setRetryCount(prev => prev + 1)
+    checkServer()
+  }
 
   return (
     <div style={{ 
@@ -126,6 +213,10 @@ export default function WidgetPage() {
               setServerAvailable(true)
               setShowFallback(false)
             }}
+            onLoadStart={() => {
+              // If iframe starts loading, hide fallback
+              setShowFallback(false)
+            }}
           />
         </div>
       ) : (
@@ -193,9 +284,37 @@ export default function WidgetPage() {
               npm run dev
             </code>
           </div>
-          <p style={{ fontSize: '11px', opacity: 0.6, fontFamily: 'monospace', marginTop: '10px' }}>
+          <p style={{ fontSize: '11px', opacity: 0.6, fontFamily: 'monospace', marginTop: '10px', marginBottom: '20px' }}>
             Expected URL: {widgetUrl}
           </p>
+          <button
+            onClick={handleRetry}
+            disabled={isRetrying}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#C9A961',
+              color: '#1A0F0A',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: isRetrying ? 'not-allowed' : 'pointer',
+              opacity: isRetrying ? 0.6 : 1,
+              transition: 'opacity 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              if (!isRetrying) {
+                e.currentTarget.style.opacity = '0.9'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isRetrying) {
+                e.currentTarget.style.opacity = '1'
+              }
+            }}
+          >
+            {isRetrying ? 'Checking...' : `Retry Connection ${retryCount > 0 ? `(${retryCount})` : ''}`}
+          </button>
         </div>
       )}
     </div>

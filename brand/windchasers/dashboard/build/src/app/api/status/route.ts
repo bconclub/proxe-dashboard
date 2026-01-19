@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { errorLogger } from '@/lib/errorLogger'
 import fs from 'fs'
 import path from 'path'
 
@@ -79,6 +80,28 @@ interface StatusResponse {
     sample: string
   }
   recommendations: string[]
+  errorDetails?: {
+    systemHealth?: {
+      message: string
+      timestamp: string
+    }
+    database?: {
+      message: string
+      timestamp: string
+    }
+    webAgent?: {
+      message: string
+      timestamp: string
+    }
+    whatsappAgent?: {
+      message: string
+      timestamp: string
+    }
+    dashboard?: {
+      message: string
+      timestamp: string
+    }
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -203,7 +226,9 @@ export async function GET(request: NextRequest) {
           }
         }
       } catch (error) {
-        status.connectivity.error = error instanceof Error ? error.message : 'Unknown error'
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        status.connectivity.error = errorMessage
+        errorLogger.log('Connectivity', `Failed to reach Supabase: ${errorMessage}`)
         status.recommendations.push('Cannot reach Supabase. Check your internet connection and Supabase project status.')
       }
     }
@@ -237,8 +262,10 @@ export async function GET(request: NextRequest) {
           status.auth.error = `Auth service returned ${authResponse.status}`
         }
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         status.auth.status = 'error'
-        status.auth.error = error instanceof Error ? error.message : 'Unknown error'
+        status.auth.error = errorMessage
+        errorLogger.log('Auth', `Auth service error: ${errorMessage}`)
       }
     }
 
@@ -262,6 +289,8 @@ export async function GET(request: NextRequest) {
         status.database.error = error.message
         
         if (error.message.includes('infinite recursion')) {
+          const errorMsg = 'Infinite recursion detected in RLS policies for dashboard_users'
+          errorLogger.log('Database', errorMsg, 'Run migration 010_fix_dashboard_users_rls_recursion.sql to fix this issue')
           status.recommendations.push('⚠️ CRITICAL: Infinite recursion detected in RLS policies. Run migration 010_fix_dashboard_users_rls_recursion.sql')
         } else if (error.code === '42501') {
           status.recommendations.push('Database RLS (Row Level Security) is blocking access. Check your RLS policies.')
@@ -299,9 +328,11 @@ export async function GET(request: NextRequest) {
         }
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       status.database.status = 'error'
-      status.database.message = error instanceof Error ? error.message : 'Database connection error'
-      status.database.error = error instanceof Error ? error.message : 'Unknown error'
+      status.database.message = errorMessage
+      status.database.error = errorMessage
+      errorLogger.log('Database', `Database connection error: ${errorMessage}`)
     }
 
     // Check Project Status
@@ -369,10 +400,12 @@ export async function GET(request: NextRequest) {
         }
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Claude API check failed'
       status.apiStatus.claude = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Claude API check failed',
+        message: errorMessage,
       }
+      errorLogger.log('Claude API', `Claude API error: ${errorMessage}`)
     }
 
     // Performance Metrics (Input to Output Gap)
@@ -426,9 +459,128 @@ export async function GET(request: NextRequest) {
       status.recommendations.push('✅ All Supabase services are working correctly!')
     }
 
+    // Check Web Agent Status (server-side) - check database for web sessions
+    let webAgentError: { message: string; timestamp: string } | undefined
+    if (status.database.status === 'connected') {
+      try {
+        const supabase = await createClient()
+        const { error: webError } = await supabase
+          .from('web_sessions')
+          .select('id')
+          .limit(1)
+        
+        // Web agent is considered active if database is connected
+        // Only log error if there's a specific issue
+        if (webError && !webError.message.includes('does not exist')) {
+          const errorMsg = `Web agent database check failed: ${webError.message}`
+          errorLogger.log('Web Agent', errorMsg)
+          webAgentError = {
+            message: errorMsg,
+            timestamp: new Date().toISOString(),
+          }
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Web agent check failed'
+        errorLogger.log('Web Agent', errorMsg)
+        webAgentError = {
+          message: errorMsg,
+          timestamp: new Date().toISOString(),
+        }
+      }
+    } else {
+      // If database is not connected, web agent can't work
+      const errorMsg = 'Web agent unavailable - database connection required'
+      errorLogger.log('Web Agent', errorMsg)
+      webAgentError = {
+        message: errorMsg,
+        timestamp: new Date().toISOString(),
+      }
+    }
+
+    // Check WhatsApp Agent Status (server-side) - check database for whatsapp sessions
+    let whatsappAgentError: { message: string; timestamp: string } | undefined
+    if (status.database.status === 'connected') {
+      try {
+        const supabase = await createClient()
+        const { error: whatsappError } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('channel', 'whatsapp')
+          .limit(1)
+        
+        // WhatsApp agent is considered active if database is connected
+        // Only log error if there's a specific issue
+        if (whatsappError && !whatsappError.message.includes('does not exist')) {
+          const errorMsg = `WhatsApp agent database check failed: ${whatsappError.message}`
+          errorLogger.log('WhatsApp Agent', errorMsg)
+          whatsappAgentError = {
+            message: errorMsg,
+            timestamp: new Date().toISOString(),
+          }
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'WhatsApp agent check failed'
+        errorLogger.log('WhatsApp Agent', errorMsg)
+        whatsappAgentError = {
+          message: errorMsg,
+          timestamp: new Date().toISOString(),
+        }
+      }
+    } else {
+      // If database is not connected, WhatsApp agent can't work
+      const errorMsg = 'WhatsApp agent unavailable - database connection required'
+      errorLogger.log('WhatsApp Agent', errorMsg)
+      whatsappAgentError = {
+        message: errorMsg,
+        timestamp: new Date().toISOString(),
+      }
+    }
+
     // Update system health status based on checks
     if (status.database.status === 'error' || status.auth.status === 'error' || !status.connectivity.canReachSupabase) {
       status.systemHealth.status = 'error'
+      errorLogger.log('System Health', 'System health check failed - one or more components are in error state')
+    }
+
+    // Collect error details for components with errors
+    const errorDetails: StatusResponse['errorDetails'] = {}
+    
+    if (status.systemHealth.status === 'error') {
+      const lastError = errorLogger.getLastError('System Health')
+      if (lastError) {
+        errorDetails.systemHealth = {
+          message: lastError.message,
+          timestamp: lastError.timestamp,
+        }
+      }
+    }
+    
+    if (status.database.status === 'error' || status.database.status === 'disconnected') {
+      const lastError = errorLogger.getLastError('Database')
+      if (lastError) {
+        errorDetails.database = {
+          message: lastError.message,
+          timestamp: lastError.timestamp,
+        }
+      } else if (status.database.error) {
+        errorDetails.database = {
+          message: status.database.error,
+          timestamp: new Date().toISOString(),
+        }
+      }
+    }
+
+    if (webAgentError) {
+      errorDetails.webAgent = webAgentError
+    }
+
+    if (whatsappAgentError) {
+      errorDetails.whatsappAgent = whatsappAgentError
+    }
+
+    // Add error details to response
+    if (Object.keys(errorDetails).length > 0) {
+      status.errorDetails = errorDetails
     }
 
     return NextResponse.json(status, {
