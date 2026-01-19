@@ -19,7 +19,7 @@ const STATUS_OPTIONS = [
 ]
 
 const getStatusColor = (status: string | null) => {
-  const statusColors: Record<string, { bg: string; text: string }> = {
+  const statusColors: Record<string, { bg: string; text: string; style?: { backgroundColor: string; color: string } }> = {
     'New Lead': { bg: 'bg-blue-100 dark:bg-blue-900', text: 'text-blue-800 dark:text-blue-200' },
     'Follow Up': { bg: 'bg-yellow-100 dark:bg-yellow-900', text: 'text-yellow-800 dark:text-yellow-200' },
     'RNR (No Response)': { bg: 'bg-gray-100 dark:bg-gray-900', text: 'text-gray-800 dark:text-gray-200' },
@@ -32,7 +32,7 @@ const getStatusColor = (status: string | null) => {
 }
 
 const getStageColor = (stage: string | null) => {
-  const stageColors: Record<string, { bg: string; text: string }> = {
+  const stageColors: Record<string, { bg: string; text: string; style?: { backgroundColor: string; color: string } }> = {
     'New': { bg: 'bg-blue-100 dark:bg-blue-900', text: 'text-blue-800 dark:text-blue-200' },
     'Engaged': { bg: 'bg-cyan-100 dark:bg-cyan-900', text: 'text-cyan-800 dark:text-cyan-200' },
     'Qualified': { bg: 'bg-yellow-100 dark:bg-yellow-900', text: 'text-yellow-800 dark:text-yellow-200' },
@@ -183,7 +183,7 @@ export default function LeadsTable({
       filtered = filtered.slice(0, limit)
     }
 
-    setFilteredLeads(filtered)
+    setFilteredLeads(filtered as ExtendedLead[])
   }, [leads, dateFilter, sourceFilter, statusFilter, limit])
 
   // Calculate scores for filtered leads (same calculation as modal)

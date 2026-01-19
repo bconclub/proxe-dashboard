@@ -245,7 +245,9 @@ export default function InboxPage() {
         if (!leadsError && activeLeads && activeLeads.length > 0) {
           console.log('Found active leads as fallback:', activeLeads.length)
           // Create conversations from leads (even without messages)
-          const fallbackConversations: Conversation[] = activeLeads.map(lead => {
+          // Type assertion for activeLeads to fix TypeScript inference issue
+          const typedLeads = activeLeads as any[]
+          const fallbackConversations: Conversation[] = typedLeads.map((lead: any) => {
             const channels: string[] = []
             if (lead.first_touchpoint) channels.push(lead.first_touchpoint)
             if (lead.last_touchpoint && !channels.includes(lead.last_touchpoint)) {
@@ -277,9 +279,11 @@ export default function InboxPage() {
       console.log('Sample message:', messagesData[0])
 
       // Group by lead_id and collect ALL channels per lead
+      // Type assertion for messagesData to fix TypeScript inference issue
+      const typedMessages = (messagesData || []) as any[]
       const conversationMap = new Map<string, any>()
       
-      for (const msg of messagesData) {
+      for (const msg of typedMessages) {
         if (!msg.lead_id) continue
         
         if (!conversationMap.has(msg.lead_id)) {
@@ -339,7 +343,9 @@ export default function InboxPage() {
         } else {
           console.log('🔍 Diagnostic: Messages for sample leads:', diagnosticMessages?.length || 0)
           if (diagnosticMessages && diagnosticMessages.length > 0) {
-            console.log('   Sample message lead_ids:', diagnosticMessages.map(m => m.lead_id))
+            // Type assertion for diagnosticMessages to fix TypeScript inference issue
+            const typedDiagMessages = diagnosticMessages as any[]
+            console.log('   Sample message lead_ids:', typedDiagMessages.map((m: any) => m.lead_id))
           }
         }
       }
@@ -347,9 +353,12 @@ export default function InboxPage() {
       // Build final conversations array
       const conversationsArray: Conversation[] = []
 
+      // Type assertion for leadsData to fix TypeScript inference issue
+      const typedLeadsData = (leadsData || []) as any[]
+
       for (const [leadId, convData] of conversationMap) {
         // Find matching lead - ensure we're comparing strings
-        const lead = leadsData?.find((l: any) => String(l.id) === String(leadId))
+        const lead = typedLeadsData.find((l: any) => String(l.id) === String(leadId))
         
         const conversation: Conversation = {
           lead_id: leadId,
@@ -434,16 +443,18 @@ export default function InboxPage() {
       console.log('Fetched messages:', data?.length || 0, 'messages')
       if (data && data.length > 0) {
         console.log('Sample message:', data[0])
+        // Type assertion for data to fix TypeScript inference issue
+        const typedData = data as any[]
         // If we got messages but no channel was selected, set the channel from the first message
-        if (!selectedChannel && data[0].channel) {
-          console.log('Setting channel from first message:', data[0].channel)
-          setSelectedChannel(data[0].channel)
+        if (!selectedChannel && typedData[0]?.channel) {
+          console.log('Setting channel from first message:', typedData[0].channel)
+          setSelectedChannel(typedData[0].channel)
         }
       } else {
         console.log('No messages found for lead:', leadId)
       }
       
-      setMessages(data || [])
+      setMessages((data || []) as any[])
     } catch (err) {
       console.error('Error in fetchMessages:', err)
       setMessages([])
@@ -466,6 +477,9 @@ export default function InboxPage() {
         return;
       }
       
+      // Type assertion for lead data to fix TypeScript inference issue
+      const typedLead = lead as any
+      
       // Fetch booking data from web_sessions (most recent booking)
       const { data: webSession } = await supabase
         .from('web_sessions')
@@ -475,16 +489,19 @@ export default function InboxPage() {
         .limit(1)
         .maybeSingle();
       
+      // Type assertion for webSession to fix TypeScript inference issue
+      const typedWebSession = webSession as any
+      
       // Also check unified_context for booking data
-      const bookingFromContext = lead.unified_context?.web?.booking_date || lead.unified_context?.whatsapp?.booking_date;
-      const bookingTimeFromContext = lead.unified_context?.web?.booking_time || lead.unified_context?.whatsapp?.booking_time;
+      const bookingFromContext = typedLead.unified_context?.web?.booking_date || typedLead.unified_context?.whatsapp?.booking_date;
+      const bookingTimeFromContext = typedLead.unified_context?.web?.booking_time || typedLead.unified_context?.whatsapp?.booking_time;
       
       // Convert booking_time to string if it's a Time object
       let bookingTime = null;
-      if (webSession?.booking_time) {
-        bookingTime = typeof webSession.booking_time === 'string' 
-          ? webSession.booking_time 
-          : String(webSession.booking_time);
+      if (typedWebSession?.booking_time) {
+        bookingTime = typeof typedWebSession.booking_time === 'string' 
+          ? typedWebSession.booking_time 
+          : String(typedWebSession.booking_time);
       } else if (bookingTimeFromContext) {
         bookingTime = typeof bookingTimeFromContext === 'string'
           ? bookingTimeFromContext
@@ -493,26 +510,26 @@ export default function InboxPage() {
       
       // Transform to match the Lead interface expected by LeadDetailsModal
       const leadData = {
-        id: lead.id,
-        name: lead.customer_name || 'Unknown',
-        email: lead.email || '',
-        phone: lead.phone || '',
-        source: lead.first_touchpoint || lead.last_touchpoint || 'web',
-        first_touchpoint: lead.first_touchpoint || null,
-        last_touchpoint: lead.last_touchpoint || null,
-        timestamp: lead.created_at || lead.timestamp,
-        status: lead.status || webSession?.booking_status || 'New Lead',
-        booking_date: webSession?.booking_date || bookingFromContext || null,
+        id: typedLead.id,
+        name: typedLead.customer_name || 'Unknown',
+        email: typedLead.email || '',
+        phone: typedLead.phone || '',
+        source: typedLead.first_touchpoint || typedLead.last_touchpoint || 'web',
+        first_touchpoint: typedLead.first_touchpoint || null,
+        last_touchpoint: typedLead.last_touchpoint || null,
+        timestamp: typedLead.created_at || typedLead.timestamp,
+        status: typedLead.status || typedWebSession?.booking_status || 'New Lead',
+        booking_date: typedWebSession?.booking_date || bookingFromContext || null,
         booking_time: bookingTime,
-        unified_context: lead.unified_context || null,
-        metadata: lead.metadata || {}
+        unified_context: typedLead.unified_context || null,
+        metadata: typedLead.metadata || {}
       };
       
       console.log('Lead modal data:', {
         booking_date: leadData.booking_date,
         booking_time: leadData.booking_time,
-        webSession,
-        unified_context: lead.unified_context
+        webSession: typedWebSession,
+        unified_context: typedLead.unified_context
       });
       
       setSelectedLead(leadData);
@@ -560,8 +577,10 @@ export default function InboxPage() {
     
     try {
       // Build conversation text from messages
-      const conversationText = messages
-        .map(msg => `${msg.sender === 'customer' ? currentConversation?.lead_name || 'Customer' : 'PROXe'}: ${msg.content}`)
+      // Type assertion for messages to fix TypeScript inference issue
+      const typedMessages = messages as any[]
+      const conversationText = typedMessages
+        .map((msg: any) => `${msg.sender === 'customer' ? currentConversation?.lead_name || 'Customer' : 'PROXe'}: ${msg.content}`)
         .join('\n');
       
       // Call Claude API to summarize (you can create a new API route or use existing)
@@ -579,7 +598,8 @@ export default function InboxPage() {
         setConversationSummary(data.summary);
       } else {
         // Fallback: Generate a basic summary from messages
-        const customerMessages = messages.filter(m => m.sender === 'customer').map(m => m.content);
+        const typedMsgs = messages as any[]
+        const customerMessages = typedMsgs.filter((m: any) => m.sender === 'customer').map((m: any) => m.content);
         const topics = customerMessages.slice(0, 3).join(', ');
         setConversationSummary(`Customer discussed: ${topics.substring(0, 200)}...`);
       }
@@ -917,7 +937,7 @@ export default function InboxPage() {
                   No messages yet
                 </div>
               ) : (
-                messages.map((msg) => (
+                (messages as any[]).map((msg: any) => (
                   <div
                     key={msg.id}
                     className={`flex ${msg.sender === 'customer' ? 'justify-start' : 'justify-end'}`}

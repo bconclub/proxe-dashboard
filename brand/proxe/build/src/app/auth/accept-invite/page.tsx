@@ -36,18 +36,21 @@ function AcceptInviteForm() {
         return
       }
 
-      if (data.accepted_at) {
+      // Type assertion for invitation data
+      const invitationData = data as any
+
+      if (invitationData.accepted_at) {
         setError('This invitation has already been accepted')
         return
       }
 
-      if (new Date(data.expires_at) < new Date()) {
+      if (new Date(invitationData.expires_at) < new Date()) {
         setError('This invitation has expired')
         return
       }
 
-      setInvitation(data)
-      setEmail(data.email)
+      setInvitation(invitationData)
+      setEmail(invitationData.email)
     }
 
     verifyInvitation()
@@ -90,20 +93,25 @@ function AcceptInviteForm() {
 
     // Mark invitation as accepted
     if (authData.user) {
-      const { error: updateError } = await supabase
+      // Type assertion for update operations - cast supabase client to any to bypass strict typing
+      const updateQuery = (supabase as any)
         .from('user_invitations')
         .update({ accepted_at: new Date().toISOString() })
         .eq('token', token)
+      
+      const { error: updateError } = await updateQuery
 
       if (updateError) {
         console.error('Error updating invitation:', updateError)
       }
 
       // Update dashboard_user role
-      const { error: roleError } = await supabase
+      const roleUpdateQuery = (supabase as any)
         .from('dashboard_users')
-        .update({ role: invitation.role })
+        .update({ role: (invitation as any).role })
         .eq('id', authData.user.id)
+      
+      const { error: roleError } = await roleUpdateQuery
 
       if (roleError) {
         console.error('Error updating role:', roleError)

@@ -136,9 +136,12 @@ export default function FounderDashboard() {
       }
 
       if (lead) {
-        console.log('✅ Lead fetched:', lead.customer_name || 'Unknown')
+        // Type assertion for lead data to fix TypeScript inference issue
+        const typedLead = lead as any
+        
+        console.log('✅ Lead fetched:', typedLead.customer_name || 'Unknown')
         // Get booking data from unified_context
-        const unifiedContext = lead.unified_context || {}
+        const unifiedContext = typedLead.unified_context || {}
         const webBooking = unifiedContext?.web?.booking || {}
         const whatsappBooking = unifiedContext?.whatsapp?.booking || {}
         
@@ -157,21 +160,21 @@ export default function FounderDashboard() {
           null
 
         // Convert to Lead type expected by LeadDetailsModal
-        const modalLead: Lead = {
-          id: lead.id,
-          name: lead.customer_name || 'Unknown',
-          email: lead.email || '',
-          phone: lead.phone || '',
-          source: lead.first_touchpoint || lead.last_touchpoint || 'web',
-          first_touchpoint: lead.first_touchpoint || null,
-          last_touchpoint: lead.last_touchpoint || null,
-          timestamp: lead.created_at || new Date().toISOString(),
-          status: lead.status || null,
+        const modalLead = {
+          id: typedLead.id,
+          name: typedLead.customer_name || 'Unknown',
+          email: typedLead.email || '',
+          phone: typedLead.phone || '',
+          source: typedLead.first_touchpoint || typedLead.last_touchpoint || 'web',
+          first_touchpoint: typedLead.first_touchpoint || null,
+          last_touchpoint: typedLead.last_touchpoint || null,
+          timestamp: typedLead.created_at || new Date().toISOString(),
+          status: typedLead.status || null,
           booking_date: bookingDate,
           booking_time: bookingTime,
-          unified_context: lead.unified_context || null,
+          unified_context: typedLead.unified_context || null,
           metadata: {},
-        }
+        } as Lead
 
         console.log('✅ Setting selected lead and opening modal')
         setSelectedLead(modalLead)
