@@ -211,6 +211,9 @@ export default function InboxPage() {
       }
 
       const { data: messagesData, error: messagesError } = await query
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/ccc34e9d-10fc-4755-9d86-188049e8d67e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inbox/page.tsx:214',message:'messages query result',data:{hasError:!!messagesError,hasData:Array.isArray(messagesData),dataLength:Array.isArray(messagesData)?messagesData.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'inbox-msg',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion agent log
 
       if (messagesError) {
         console.error('Error fetching messages:', messagesError)
@@ -223,6 +226,9 @@ export default function InboxPage() {
       console.log('Fetched messages:', messagesData?.length || 0)
       
       if (!messagesData || messagesData.length === 0) {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/ccc34e9d-10fc-4755-9d86-188049e8d67e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inbox/page.tsx:225',message:'no messages fallback path',data:{hasData:!!messagesData,dataLength:messagesData?.length ?? 0},timestamp:Date.now(),sessionId:'debug-session',runId:'inbox-msg',hypothesisId:'H2'})}).catch(()=>{});
+        // #endregion agent log
         console.log('No messages found - checking if this is a data issue or query issue')
         // Try fetching without filters to see if any messages exist
         const { data: allMessages, error: allError } = await supabase
@@ -274,12 +280,25 @@ export default function InboxPage() {
         return
       }
 
-      console.log('Sample message:', messagesData[0])
+      const messages = (messagesData ?? []) as Array<{
+        lead_id: string | null
+        channel?: string | null
+        content?: string | null
+        created_at?: string | null
+        sender?: string | null
+      }>
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/ccc34e9d-10fc-4755-9d86-188049e8d67e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inbox/page.tsx:279',message:'messages sample keys',data:{count:messages.length,hasFirst:!!messages[0],firstKeys:messages[0]?Object.keys(messages[0]).slice(0,5):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'inbox-msg',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion agent log
+      console.log('Sample message:', messages[0])
 
       // Group by lead_id and collect ALL channels per lead
       const conversationMap = new Map<string, any>()
       
-      for (const msg of messagesData) {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/ccc34e9d-10fc-4755-9d86-188049e8d67e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inbox/page.tsx:282',message:'building conversationMap',data:{messageCount:messages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'inbox-msg',hypothesisId:'H3'})}).catch(()=>{});
+      // #endregion agent log
+      for (const msg of messages) {
         if (!msg.lead_id) continue
         
         if (!conversationMap.has(msg.lead_id)) {
@@ -302,6 +321,9 @@ export default function InboxPage() {
         }
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/ccc34e9d-10fc-4755-9d86-188049e8d67e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inbox/page.tsx:305',message:'conversationMap size',data:{conversationCount:conversationMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'inbox-msg',hypothesisId:'H3'})}).catch(()=>{});
+      // #endregion agent log
       console.log('Unique conversations:', conversationMap.size)
 
       // Get lead details for all conversations
@@ -319,6 +341,9 @@ export default function InboxPage() {
         .from('all_leads')
         .select('id, customer_name, email, phone')
         .in('id', leadIds)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/ccc34e9d-10fc-4755-9d86-188049e8d67e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inbox/page.tsx:322',message:'lead lookup result',data:{leadIdsCount:leadIds.length,hasError:!!leadsError,leadsCount:Array.isArray(leadsData)?leadsData.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'inbox-msg',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion agent log
 
       if (leadsError) {
         console.error('Error fetching leads:', leadsError)
