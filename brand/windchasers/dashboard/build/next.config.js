@@ -4,6 +4,14 @@ const nextConfig = {
   experimental: {
     trustProxy: true,
   },
+  eslint: {
+    // Don't fail build on ESLint errors during production builds
+    ignoreDuringBuilds: false,
+  },
+  typescript: {
+    // Don't fail build on TypeScript errors (we already have type-check script)
+    ignoreBuildErrors: false,
+  },
   webpack: (config, { isServer }) => {
     // Fix for Next.js vendor chunk issue with @ symbols in filenames
     // Disable server-side vendor chunk splitting to avoid Node.js require() issues with @ symbols
