@@ -6,6 +6,7 @@ const nextConfig = {
     return [
       {
         // CORS headers for widget page (iframe embedding)
+        // Note: Middleware will override these in development for localhost support
         source: '/widget',
         headers: [
           {
@@ -14,7 +15,20 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
+            // Production CSP - middleware will remove this in development
             value: "frame-ancestors 'self' https://proxe.windchasers.in https://windchasers.in",
+          },
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*',
+          },
+          {
+            key: 'Access-Control-Allow-Methods',
+            value: 'GET, POST, OPTIONS',
+          },
+          {
+            key: 'Access-Control-Allow-Headers',
+            value: 'Content-Type, Authorization',
           },
         ],
       },
