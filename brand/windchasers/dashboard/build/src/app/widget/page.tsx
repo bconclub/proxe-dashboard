@@ -104,11 +104,10 @@ export default function WidgetPage() {
         const currentHost = window.location.hostname
         const currentProtocol = window.location.protocol
         
-        // If we're on production domain (proxe.windchasers.in), use same domain
-        if (currentHost.includes('windchasers.in') || currentHost.includes('proxe.windchasers.in')) {
-          // Use same domain and protocol, but check if web-agent is on a subdomain or same domain
-          // Try same domain first (most common setup)
-          agentUrl = `${currentProtocol}//${currentHost}`
+        // If we're on production domain, use pilot.windchasers.in for web-agent
+        if (currentHost.includes('windchasers.in')) {
+          // On production, web-agent is on separate domain: pilot.windchasers.in
+          agentUrl = 'https://pilot.windchasers.in'
         } else {
           // Development - use localhost
           agentUrl = 'http://localhost:3001'
@@ -306,7 +305,7 @@ export default function WidgetPage() {
               <p style={{ fontSize: '11px', opacity: 0.9, marginBottom: '8px', lineHeight: '1.6' }}>
                 1. Deploy the web-agent server separately or serve it from the same domain<br/>
                 2. Set <code style={{ backgroundColor: 'rgba(26, 15, 10, 0.5)', padding: '2px 4px', borderRadius: '2px' }}>NEXT_PUBLIC_WEB_AGENT_URL</code> environment variable<br/>
-                3. Or ensure the web-agent is accessible at: <code style={{ backgroundColor: 'rgba(26, 15, 10, 0.5)', padding: '2px 4px', borderRadius: '2px' }}>{typeof window !== 'undefined' ? window.location.origin : 'https://proxe.windchasers.in'}/widget</code>
+                3. Or ensure the web-agent is accessible at: <code style={{ backgroundColor: 'rgba(26, 15, 10, 0.5)', padding: '2px 4px', borderRadius: '2px' }}>https://pilot.windchasers.in</code>
               </p>
             </div>
           )}
