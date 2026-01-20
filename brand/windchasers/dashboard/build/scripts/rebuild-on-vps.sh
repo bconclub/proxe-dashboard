@@ -65,17 +65,39 @@ if [ -d ".next/static/css" ]; then
   fi
 fi
 
+# Force stop and delete old process
+echo "🔄 Stopping old process..."
+pm2 stop windchasers-dashboard 2>/dev/null || true
+pm2 delete windchasers-dashboard 2>/dev/null || true
+pm2 stop ecosystem.config.js --only windchasers-dashboard 2>/dev/null || true
+sleep 2
+
 # Restart
-echo "🔄 Restarting application..."
+echo "🔄 Starting application..."
 if [ -f ecosystem.config.js ]; then
-  pm2 restart ecosystem.config.js --only windchasers-dashboard || \
-  pm2 start ecosystem.config.js --only windchasers-dashboard
+  pm2 start ecosystem.config.js --only windchasers-dashboard || {
+    echo "⚠️  Failed to start with ecosystem, trying fallback..."
+    PORT=3003 pm2 start npm --name windchasers-dashboard -- start
+  }
 else
-  PORT=3003 pm2 restart windchasers-proxe || \
-  PORT=3003 pm2 start npm --name windchasers-proxe -- start
+  PORT=3003 pm2 start npm --name windchasers-dashboard -- start
 fi
 
 pm2 save
+
+# Wait for app to start
+echo "⏳ Waiting for app to start..."
+sleep 5
+
+# Verify it's running
+echo "📊 PM2 status:"
+pm2 list | grep windchasers
+pm2 describe windchasers-dashboard | head -15 || true
+
+# Test health endpoint
+echo "🏥 Testing health endpoint..."
+sleep 3
+curl -f http://localhost:3003/api/health && echo "" || echo "⚠️  Health endpoint not responding yet"
 
 echo "✅ Rebuild complete!"
 echo "📊 PM2 status:"

@@ -171,20 +171,33 @@ jobs:
             # Create logs directory if it doesn't exist
             mkdir -p logs
             
+            # Force stop and delete old process to ensure clean restart
+            echo "🔄 Stopping old process..."
+            pm2 stop windchasers-dashboard 2>/dev/null || true
+            pm2 delete windchasers-dashboard 2>/dev/null || true
+            pm2 stop ecosystem.config.js --only windchasers-dashboard 2>/dev/null || true
+            sleep 2
+            
             # Restart or start with PM2 ecosystem file
-            echo "🔄 Restarting application with PM2 ecosystem..."
+            echo "🔄 Starting application with PM2 ecosystem..."
             if [ -f ecosystem.config.js ]; then
               # Use ecosystem file if it exists
-              pm2 restart ecosystem.config.js --only windchasers-dashboard || \
-              pm2 start ecosystem.config.js --only windchasers-dashboard
+              pm2 start ecosystem.config.js --only windchasers-dashboard || {
+                echo "❌ Failed to start with ecosystem, trying fallback..."
+                PORT=3003 pm2 start npm --name windchasers-dashboard -- start
+              }
             else
               # Fallback to individual process
-              PORT=3003 pm2 restart windchasers-proxe || \
-              PORT=3003 pm2 start npm --name windchasers-proxe -- start
+              PORT=3003 pm2 start npm --name windchasers-dashboard -- start
             fi
             
             # Save PM2 configuration
             pm2 save
+            
+            # Verify process is running
+            echo "📊 Verifying PM2 process..."
+            pm2 list | grep windchasers || echo "⚠️  Process not found in PM2 list"
+            pm2 describe windchasers-dashboard | head -20 || true
             
             # Wait for app to start
             echo "⏳ Waiting for app to start..."
