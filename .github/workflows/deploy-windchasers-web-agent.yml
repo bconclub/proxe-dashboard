@@ -1,4 +1,4 @@
-name: Deploy Windchasers Dashboard
+name: Deploy Windchasers Web-Agent
 
 on:
   push:
@@ -6,8 +6,8 @@ on:
       - production
       - main
     paths:
-      - 'brand/windchasers/dashboard/build/**'
-      - '.github/workflows/deploy-windchasers-dashboard.yml'
+      - 'brand/windchasers/web-agent/build/**'
+      - '.github/workflows/deploy-windchasers-web-agent.yml'
   workflow_dispatch:
 
 jobs:
@@ -24,19 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
-      - name: Increment build version
-        working-directory: brand/windchasers/dashboard/build
-        run: |
-          node scripts/increment-build.js
-      
-      - name: Commit version bump
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add brand/windchasers/dashboard/build/package.json brand/windchasers/dashboard/build/.build-info
-          git commit -m "chore: auto-increment build version [skip ci]" || echo "No changes to commit"
-          git push || echo "Nothing to push"
       
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -58,15 +45,8 @@ jobs:
             --exclude='*.log' \
             --exclude='.DS_Store' \
             -e "ssh -o StrictHostKeyChecking=no" \
-            brand/windchasers/dashboard/build/ \
-            ${{ secrets.WINDCHASERS_VPS_USER }}@${{ secrets.WINDCHASERS_VPS_HOST }}:/var/www/windchasers-proxe/
-      
-      - name: Deploy PM2 Ecosystem Config
-        run: |
-          rsync -avz \
-            -e "ssh -o StrictHostKeyChecking=no" \
-            brand/windchasers/dashboard/build/ecosystem.config.js \
-            ${{ secrets.WINDCHASERS_VPS_USER }}@${{ secrets.WINDCHASERS_VPS_HOST }}:/var/www/windchasers-proxe/ecosystem.config.js
+            brand/windchasers/web-agent/build/ \
+            ${{ secrets.WINDCHASERS_VPS_USER }}@${{ secrets.WINDCHASERS_VPS_HOST }}:/var/www/windchasers-web-agent/
       
       - name: Build and Restart on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -77,7 +57,10 @@ jobs:
           port: 22
           timeout: 300s
           script: |
-            cd /var/www/windchasers-proxe
+            cd /var/www/windchasers-web-agent
+            
+            # Create logs directory if it doesn't exist
+            mkdir -p logs
             
             # Preserve existing .env.local if it exists
             if [ ! -f .env.local ]; then
@@ -108,30 +91,18 @@ jobs:
               exit 1
             fi
             
-            # Check for BUILD_ID (may not exist in all Next.js versions)
-            if [ -f ".next/BUILD_ID" ]; then
-              echo "✅ BUILD_ID found"
-            else
-              echo "⚠️  WARNING: BUILD_ID not found, but build may still be successful"
-              echo ".next directory contents:"
-              ls -la .next | head -10
-            fi
-            
             echo "✅ Build successful - .next directory exists"
             
-            # Create logs directory if it doesn't exist
-            mkdir -p logs
-            
-            # Restart or start with PM2 ecosystem file
-            echo "🔄 Restarting application with PM2 ecosystem..."
-            if [ -f ecosystem.config.js ]; then
+            # Restart using PM2 ecosystem (if exists) or individual process
+            echo "🔄 Restarting web-agent with PM2..."
+            if [ -f /var/www/windchasers-proxe/ecosystem.config.js ]; then
               # Use ecosystem file if it exists
-              pm2 restart ecosystem.config.js --only windchasers-dashboard || \
-              pm2 start ecosystem.config.js --only windchasers-dashboard
+              pm2 restart ecosystem.config.js --only windchasers-web-agent || \
+              pm2 start /var/www/windchasers-proxe/ecosystem.config.js --only windchasers-web-agent
             else
               # Fallback to individual process
-              PORT=3003 pm2 restart windchasers-proxe || \
-              PORT=3003 pm2 start npm --name windchasers-proxe -- start
+              PORT=3001 pm2 restart windchasers-web-agent || \
+              PORT=3001 pm2 start npm --name windchasers-web-agent -- start
             fi
             
             # Save PM2 configuration
@@ -141,8 +112,8 @@ jobs:
             sleep 5
             
             # Health check
-            curl -f http://localhost:3003/health || echo "⚠️  Health check failed"
+            curl -f http://localhost:3001/widget || echo "⚠️  Health check failed"
             
             # Show PM2 status
             echo "✅ Deployment complete. PM2 status:"
-            pm2 list | grep windchasers-proxe || echo "⚠️  Process not found in PM2 list"
+            pm2 list | grep windchasers-web-agent || echo "⚠️  Process not found in PM2 list"
