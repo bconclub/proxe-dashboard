@@ -104,11 +104,10 @@ export default function WidgetPage() {
         const currentHost = window.location.hostname
         const currentProtocol = window.location.protocol
         
-        // If we're on production domain (proxe.windchasers.in), use same domain
-        if (currentHost.includes('windchasers.in') || currentHost.includes('proxe.windchasers.in')) {
-          // Use same domain and protocol, but check if web-agent is on a subdomain or same domain
-          // Try same domain first (most common setup)
-          agentUrl = `${currentProtocol}//${currentHost}`
+        // If we're on production domain, use pilot.windchasers.in for web-agent
+        if (currentHost.includes('windchasers.in')) {
+          // On production, web-agent is on separate domain: pilot.windchasers.in
+          agentUrl = 'https://pilot.windchasers.in'
         } else {
           // Development - use localhost
           agentUrl = 'http://localhost:3001'
