@@ -9,6 +9,10 @@ export async function POST(request: NextRequest) {
     const { access_token, refresh_token, expires_at, expires_in, token_type, user: sessionUser } = body
     
     if (!access_token || !refresh_token) {
+      console.error('❌ Sync session: Missing session data', {
+        hasAccessToken: !!access_token,
+        hasRefreshToken: !!refresh_token,
+      })
       return NextResponse.json(
         { error: 'Missing session data' },
         { status: 400 }
@@ -16,8 +20,32 @@ export async function POST(request: NextRequest) {
     }
     
     // Windchasers Supabase configuration
-    const supabaseUrl = process.env.NEXT_PUBLIC_WINDCHASERS_SUPABASE_URL || 'https://placeholder.supabase.co'
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_WINDCHASERS_SUPABASE_ANON_KEY || 'placeholder-key'
+    const supabaseUrl = process.env.NEXT_PUBLIC_WINDCHASERS_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_WINDCHASERS_SUPABASE_ANON_KEY
+    
+    // Log in development to help debug
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Sync session: Environment check', {
+        hasSupabaseUrl: !!supabaseUrl,
+        supabaseUrlPreview: supabaseUrl?.substring(0, 30) + '...',
+        hasAnonKey: !!supabaseAnonKey,
+        anonKeyLength: supabaseAnonKey?.length,
+      })
+    }
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('❌ Sync session: Supabase environment variables not set')
+      return NextResponse.json(
+        { 
+          error: 'Server configuration error: Supabase credentials not configured',
+          details: process.env.NODE_ENV === 'development' ? {
+            missingUrl: !supabaseUrl,
+            missingKey: !supabaseAnonKey,
+          } : undefined
+        },
+        { status: 500 }
+      )
+    }
     
     const cookieStore = await cookies()
 
@@ -59,6 +87,15 @@ export async function POST(request: NextRequest) {
       }
     )
     
+    // Verify environment variables are set
+    if (!supabaseUrl || supabaseUrl.includes('placeholder') || !supabaseAnonKey || supabaseAnonKey.includes('placeholder')) {
+      console.error('❌ Sync session: Supabase environment variables not configured')
+      return NextResponse.json(
+        { error: 'Server configuration error: Supabase credentials not set' },
+        { status: 500 }
+      )
+    }
+    
     // Set the session - this will trigger cookie setting
     const { data: { session }, error: setError } = await supabase.auth.setSession({
       access_token,
@@ -66,9 +103,27 @@ export async function POST(request: NextRequest) {
     })
     
     if (setError) {
-      console.error('Set session error:', setError)
+      console.error('❌ Set session error:', {
+        message: setError.message,
+        status: (setError as any)?.status,
+        name: setError.name,
+      })
       return NextResponse.json(
-        { error: setError.message },
+        { 
+          error: setError.message,
+          details: process.env.NODE_ENV === 'development' ? {
+            supabaseUrl: supabaseUrl?.substring(0, 30) + '...',
+            hasAnonKey: !!supabaseAnonKey,
+          } : undefined
+        },
+        { status: 401 }
+      )
+    }
+    
+    if (!session) {
+      console.error('❌ Sync session: Session is null after setSession')
+      return NextResponse.json(
+        { error: 'Session not created' },
         { status: 401 }
       )
     }
@@ -77,9 +132,19 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: getUserError } = await supabase.auth.getUser()
     
     if (getUserError || !user) {
-      console.error('❌ Sync session: Failed to get user after setting session:', getUserError)
+      console.error('❌ Sync session: Failed to get user after setting session:', {
+        error: getUserError?.message,
+        status: (getUserError as any)?.status,
+        hasSession: !!session,
+      })
       return NextResponse.json(
-        { error: 'Failed to get user' },
+        { 
+          error: getUserError?.message || 'Failed to get user',
+          details: process.env.NODE_ENV === 'development' ? {
+            sessionExists: !!session,
+            sessionUser: session?.user?.email,
+          } : undefined
+        },
         { status: 401 }
       )
     }

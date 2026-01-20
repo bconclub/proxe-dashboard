@@ -196,7 +196,10 @@ export default function LoginPage() {
             
             // Send session to API to set cookies on server
             try {
-              const syncResponse = await fetch('/api/auth/sync-session', {
+              const syncUrl = '/api/auth/sync-session'
+              console.log('🔄 Attempting to sync session to:', syncUrl)
+              
+              const syncResponse = await fetch(syncUrl, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -212,10 +215,26 @@ export default function LoginPage() {
                 credentials: 'include',
               })
               
+              if (!syncResponse.ok) {
+                const errorText = await syncResponse.text()
+                let errorData
+                try {
+                  errorData = JSON.parse(errorText)
+                } catch {
+                  errorData = { error: errorText || 'Unknown error' }
+                }
+                console.error('❌ Sync failed:', {
+                  status: syncResponse.status,
+                  statusText: syncResponse.statusText,
+                  error: errorData,
+                })
+                throw new Error(`Sync failed: ${errorData.error || syncResponse.statusText}`)
+              }
+              
               const result = await syncResponse.json()
               console.log('✅ Sync response:', result)
               
-              if (syncResponse.ok) {
+              if (syncResponse.ok && result.success) {
                 console.log('✅ Session synced to cookies, redirecting...')
                 console.log('✅ Sync result:', result)
                 
@@ -253,16 +272,16 @@ export default function LoginPage() {
                 // This is more reliable than router.push for auth redirects
                 window.location.href = '/dashboard'
               } else {
-                console.warn('⚠️ Sync failed:', result)
-                console.warn('⚠️ Still redirecting - client session exists, server may not have cookies yet')
-                // Wait a bit before redirecting
+                console.warn('⚠️ Sync returned non-ok status:', result)
+                // Still redirect - client-side check will handle it
                 await new Promise(resolve => setTimeout(resolve, 500))
-                // Use window.location for full reload
                 window.location.href = '/dashboard'
               }
             } catch (error) {
               console.error('❌ Sync error:', error)
+              console.warn('⚠️ Still redirecting - client session exists, server may not have cookies yet')
               // Still redirect - client-side check will handle it
+              await new Promise(resolve => setTimeout(resolve, 500))
               window.location.href = '/dashboard'
             }
           } else if (data?.user) {
