@@ -555,7 +555,8 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    if (status.database.status === 'error' || status.database.status === 'disconnected') {
+    // Check for database errors (all non-connected states)
+    if (status.database.status !== 'connected') {
       const lastError = errorLogger.getLastError('Database')
       if (lastError) {
         errorDetails.database = {
