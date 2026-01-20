@@ -93,7 +93,13 @@ export function useChatStream({ brand, apiUrl, onMessageComplete }: UseChatStrea
     try {
       // Use explicit API URL if provided, otherwise check environment variable, fallback to relative path
       // apiUrl from config is already the full path (e.g., '/api/chat'), not a base URL
-      const apiEndpoint = apiUrl || process.env.NEXT_PUBLIC_API_URL || '/api/chat';
+      let apiEndpoint = apiUrl || process.env.NEXT_PUBLIC_API_URL || '/api/chat';
+      
+      // If apiEndpoint is relative, make it absolute using current origin
+      // This ensures it works correctly when widget is in an iframe
+      if (typeof window !== 'undefined' && apiEndpoint.startsWith('/')) {
+        apiEndpoint = `${window.location.origin}${apiEndpoint}`;
+      }
       
       const response = await fetch(apiEndpoint, {
         method: 'POST',

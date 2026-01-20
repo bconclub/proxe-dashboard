@@ -78,13 +78,41 @@ Create a crisp, concise summary (1-2 sentences max). Preserve key context from p
     const updatedSummary =
       content && content.type === 'text' ? content.text.trim() : previousSummary;
 
-    return Response.json({ summary: updatedSummary, brand }, { status: 200 });
+    return Response.json(
+      { summary: updatedSummary, brand }, 
+      { 
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+      }
+    );
   } catch (error: any) {
     console.error('[chat/summarize] Failed to compress memory', error);
     return Response.json(
       { error: error?.message || 'Failed to summarize conversation' },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+      }
     );
   }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
 

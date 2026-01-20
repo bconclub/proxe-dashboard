@@ -974,10 +974,17 @@ export function ChatWidget({ apiUrl, widgetStyle = 'searchbar' }: ChatWidgetProp
     setShowPhonePrompt(false);
   };
 
+  // Helper to get absolute API URL (works in iframe)
+  const getApiUrl = (path: string) => {
+    if (typeof window === 'undefined') return path;
+    if (path.startsWith('http')) return path;
+    return `${window.location.origin}${path.startsWith('/') ? path : `/${path}`}`;
+  };
+
   const summarizeConversation = async (lastMessageTimestamp: string) => {
     if (!externalSessionId || historyRef.current.length === 0) return;
     try {
-      const response = await fetch('/api/chat/summarize', {
+      const response = await fetch(getApiUrl('/api/chat/summarize'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

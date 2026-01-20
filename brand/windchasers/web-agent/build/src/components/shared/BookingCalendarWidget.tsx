@@ -120,10 +120,17 @@ export function BookingCalendarWidget({
     setBookingError(null);
     setIsWarning(false);
 
+    // Helper to get absolute API URL (works in iframe)
+    const getApiUrl = (path: string) => {
+      if (typeof window === 'undefined') return path;
+      if (path.startsWith('http')) return path;
+      return `${window.location.origin}${path.startsWith('/') ? path : `/${path}`}`;
+    };
+
     try {
       const dateStr = formatDateForAPI(selectedDate);
       
-      const response = await fetch('/api/calendar/availability', {
+      const response = await fetch(getApiUrl('/api/calendar/availability'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -223,7 +230,7 @@ export function BookingCalendarWidget({
     try {
       const dateStr = formatDateForAPI(selectedDate);
       
-      const response = await fetch('/api/calendar/book', {
+      const response = await fetch(getApiUrl('/api/calendar/book'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
