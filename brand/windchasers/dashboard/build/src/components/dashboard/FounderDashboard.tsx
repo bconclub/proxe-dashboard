@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
@@ -82,6 +82,25 @@ export default function FounderDashboard() {
   })
   const [showThresholdDropdown, setShowThresholdDropdown] = useState(false)
 
+  const loadMetrics = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/dashboard/founder-metrics?hotLeadThreshold=${hotLeadThreshold}`)
+      if (response.ok) {
+        const data = await response.json()
+        setMetrics(data)
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error('Error loading metrics:', response.status, errorData)
+        setMetrics(null)
+      }
+    } catch (error) {
+      console.error('Error loading metrics:', error)
+      setMetrics(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [hotLeadThreshold])
+
   useEffect(() => {
     // Initial load
     loadMetrics()
@@ -108,26 +127,7 @@ export default function FounderDashboard() {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [hotLeadThreshold])
-
-  const loadMetrics = async () => {
-    try {
-      const response = await fetch(`/api/dashboard/founder-metrics?hotLeadThreshold=${hotLeadThreshold}`)
-      if (response.ok) {
-        const data = await response.json()
-        setMetrics(data)
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        console.error('Error loading metrics:', response.status, errorData)
-        setMetrics(null)
-      }
-    } catch (error) {
-      console.error('Error loading metrics:', error)
-      setMetrics(null)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [hotLeadThreshold, loadMetrics])
 
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString)

@@ -271,7 +271,7 @@ export default function StatusPage() {
             <p className="text-xs flex items-start gap-2" style={{ color: '#ef4444' }}>
               <span>└─</span>
               <span className="flex-1">
-                "{errorDetail.message}" at {formatErrorTime(errorDetail.timestamp)}
+                &quot;{errorDetail.message}&quot; at {formatErrorTime(errorDetail.timestamp)}
               </span>
             </p>
           </div>

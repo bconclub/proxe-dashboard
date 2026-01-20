@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { MdClose } from 'react-icons/md'
 
 interface ErrorLog {
@@ -21,13 +21,7 @@ export default function ErrorLogsModal({ isOpen, onClose, component }: ErrorLogs
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchLogs()
-    }
-  }, [isOpen, component])
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -45,7 +39,13 @@ export default function ErrorLogsModal({ isOpen, onClose, component }: ErrorLogs
     } finally {
       setLoading(false)
     }
-  }
+  }, [component])
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchLogs()
+    }
+  }, [isOpen, fetchLogs])
 
   const formatTimestamp = (timestamp: string) => {
     try {
