@@ -163,12 +163,23 @@ jobs:
             echo "⏳ Waiting for app to start..."
             sleep 10
             
-            # Health check with retries
+            # Health check with retries (check both /health and /api/health)
             MAX_RETRIES=5
             RETRY_COUNT=0
+            HEALTH_CHECK_PASSED=false
+            
             while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              if curl -f http://localhost:3003/health > /dev/null 2>&1; then
-                echo "✅ Health check passed"
+              # Try /api/health first (more detailed)
+              if curl -f http://localhost:3003/api/health > /dev/null 2>&1; then
+                echo "✅ Health check passed (/api/health)"
+                HEALTH_CHECK_PASSED=true
+                # Get detailed health info
+                curl -s http://localhost:3003/api/health | head -20
+                break
+              # Fallback to /health
+              elif curl -f http://localhost:3003/health > /dev/null 2>&1; then
+                echo "✅ Health check passed (/health)"
+                HEALTH_CHECK_PASSED=true
                 break
               else
                 RETRY_COUNT=$((RETRY_COUNT + 1))
@@ -177,10 +188,11 @@ jobs:
               fi
             done
             
-            if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            if [ "$HEALTH_CHECK_PASSED" = false ]; then
               echo "⚠️  Health check failed after $MAX_RETRIES attempts"
               echo "Checking PM2 logs..."
               pm2 logs windchasers-dashboard --lines 20 --nostream || true
+              echo "⚠️  Deployment completed but health check failed - please verify manually"
             fi
             
             # Show PM2 status
