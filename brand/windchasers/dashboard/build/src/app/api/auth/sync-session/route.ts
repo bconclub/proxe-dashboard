@@ -59,27 +59,27 @@ export async function POST(request: NextRequest) {
           },
           set(name: string, value: string, options: CookieOptions) {
             try {
-              cookieStore.set({
-                name,
-                value,
+              cookieStore.set(name, value, {
                 ...options,
                 sameSite: 'lax' as const,
                 secure: process.env.NODE_ENV === 'production',
                 httpOnly: options.httpOnly ?? false,
+                path: '/',
               })
             } catch (error) {
+              console.error('❌ Cookie set error (POST):', error)
               // Cookie setting can fail in some contexts
             }
           },
           remove(name: string, options: CookieOptions) {
             try {
-              cookieStore.set({
-                name,
-                value: '',
+              cookieStore.set(name, '', {
                 ...options,
                 maxAge: 0,
+                path: '/',
               })
             } catch (error) {
+              console.error('❌ Cookie remove error (POST):', error)
               // Cookie removal can fail in some contexts
             }
           },
@@ -191,27 +191,27 @@ export async function GET(request: NextRequest) {
           },
           set(name: string, value: string, options: CookieOptions) {
             try {
-              cookieStore.set({
-                name,
-                value,
+              cookieStore.set(name, value, {
                 ...options,
                 sameSite: 'lax' as const,
                 secure: process.env.NODE_ENV === 'production',
                 httpOnly: options.httpOnly ?? false,
+                path: '/',
               })
             } catch (error) {
+              console.error('❌ Cookie set error (GET):', error)
               // Cookie setting can fail in some contexts
             }
           },
           remove(name: string, options: CookieOptions) {
             try {
-              cookieStore.set({
-                name,
-                value: '',
+              cookieStore.set(name, '', {
                 ...options,
                 maxAge: 0,
+                path: '/',
               })
             } catch (error) {
+              console.error('❌ Cookie remove error (GET):', error)
               // Cookie removal can fail in some contexts
             }
           },

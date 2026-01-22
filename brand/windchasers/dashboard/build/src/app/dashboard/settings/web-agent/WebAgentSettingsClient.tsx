@@ -10,9 +10,16 @@ export default function WebAgentSettingsClient() {
 
   // Auto-load preview when component mounts
   useEffect(() => {
+    // Determine widget URL - use environment variable or default to localhost in development
+    const widgetUrl = process.env.NEXT_PUBLIC_WEB_AGENT_URL 
+      ? `${process.env.NEXT_PUBLIC_WEB_AGENT_URL}/widget`
+      : typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      ? 'http://localhost:3001/widget'
+      : 'https://widget.proxe.windchasers.in/widget'
+    
     // Ensure iframe loads when component mounts
     if (iframeRef.current) {
-      iframeRef.current.src = 'https://widget.proxe.windchasers.in/widget'
+      iframeRef.current.src = widgetUrl
     }
   }, [])
 
@@ -37,9 +44,16 @@ export default function WebAgentSettingsClient() {
       }
       keysToRemove.forEach(key => localStorage.removeItem(key))
       
+      // Determine widget URL
+      const widgetUrl = process.env.NEXT_PUBLIC_WEB_AGENT_URL 
+        ? `${process.env.NEXT_PUBLIC_WEB_AGENT_URL}/widget`
+        : typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? 'http://localhost:3001/widget'
+        : 'https://widget.proxe.windchasers.in/widget'
+      
       // Reload the iframe to reset the widget state
       if (iframeRef.current) {
-        iframeRef.current.src = 'https://widget.proxe.windchasers.in/widget'
+        iframeRef.current.src = widgetUrl
       }
       
       setTimeout(() => {
@@ -228,7 +242,11 @@ export default function WebAgentSettingsClient() {
           >
             <iframe
               ref={iframeRef}
-              src="https://widget.proxe.windchasers.in/widget"
+              src={process.env.NEXT_PUBLIC_WEB_AGENT_URL 
+                ? `${process.env.NEXT_PUBLIC_WEB_AGENT_URL}/widget`
+                : typeof window !== 'undefined' && window.location.hostname === 'localhost'
+                ? 'http://localhost:3001/widget'
+                : 'https://widget.proxe.windchasers.in/widget'}
               className="w-full h-full border-0"
               style={{
                 width: '100%',

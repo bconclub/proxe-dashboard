@@ -6,8 +6,9 @@ Standalone Windchasers brand dashboard application with aviation-specific featur
 
 1. Copy `.env.local.example` to `.env.local` and fill in your Windchasers Supabase credentials
 2. Install dependencies: `npm install`
-3. Run development server: `npm run dev`
-4. Build for production: `npm run build`
+3. (Optional) Set up Google Calendar integration - see [GOOGLE_CALENDAR_SETUP.md](./GOOGLE_CALENDAR_SETUP.md)
+4. Run development server: `npm run dev`
+5. Build for production: `npm run build`
 
 ## Brand Configuration
 
@@ -26,6 +27,15 @@ The Windchasers dashboard includes aviation-specific fields in the LeadsTable:
 - **Additional Filters**: User Type and Course Interest filters
 
 These fields are stored in `unified_context.windchasers` in the database.
+
+## Google Calendar Integration
+
+The dashboard includes Google Calendar integration for managing bookings:
+- Sync bookings from the database to Google Calendar
+- View real-time availability
+- Create, update, and delete calendar events
+
+See [GOOGLE_CALENDAR_SETUP.md](./GOOGLE_CALENDAR_SETUP.md) for setup instructions.
 
 ## Deployment
 

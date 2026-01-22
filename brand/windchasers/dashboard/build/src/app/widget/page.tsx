@@ -15,7 +15,7 @@ export default function WidgetPage() {
   const [widgetUrl, setWidgetUrl] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
   const [serverAvailable, setServerAvailable] = useState<boolean | null>(null)
-  const [showFallback, setShowFallback] = useState(true)
+  const [showFallback, setShowFallback] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
   const [isRetrying, setIsRetrying] = useState(false)
 
@@ -57,16 +57,18 @@ export default function WidgetPage() {
           }
         } catch (fetchError) {
           clearTimeout(timeoutId)
-          // For production domains, try to load anyway (might be CORS but widget could still work)
-          // Also try if it's the same origin
-          if (widgetUrl.includes('windchasers.in') || 
+          // For localhost or same origin, always try to load iframe (CORS might block fetch but iframe works)
+          if (widgetUrl.includes('localhost') || 
+              widgetUrl.includes('127.0.0.1') ||
+              widgetUrl.includes('windchasers.in') || 
               (typeof window !== 'undefined' && widgetUrl.startsWith(window.location.origin))) {
             setServerAvailable(true)
             setShowFallback(false)
             // Try loading the iframe anyway - it might work even if fetch failed
           } else {
-            setServerAvailable(false)
-            setShowFallback(true)
+            // For other domains, still try to load but show fallback if it fails
+            setServerAvailable(true)
+            setShowFallback(false)
           }
         }
       } else {
@@ -76,14 +78,17 @@ export default function WidgetPage() {
       }
     } catch (error) {
       console.log('Server check error:', error)
-      // For production or same-origin, still try to load the iframe
-      if (widgetUrl.includes('windchasers.in') || 
+      // For localhost or same-origin, always try to load the iframe
+      if (widgetUrl.includes('localhost') || 
+          widgetUrl.includes('127.0.0.1') ||
+          widgetUrl.includes('windchasers.in') || 
           (typeof window !== 'undefined' && widgetUrl.startsWith(window.location.origin))) {
         setServerAvailable(true)
         setShowFallback(false)
       } else {
-        setServerAvailable(false)
-        setShowFallback(true)
+        // For other domains, still try to load
+        setServerAvailable(true)
+        setShowFallback(false)
       }
     } finally {
       setIsLoading(false)
@@ -183,8 +188,8 @@ export default function WidgetPage() {
       </div>
 
       {/* Chat Widget - Embedded as overlay */}
-      {/* Always try to load iframe if we have a URL, even if server check failed */}
-      {(!showFallback && serverAvailable === true) || (widgetUrl && !isLoading) ? (
+      {/* Always try to load iframe if we have a URL - don't block on server check */}
+      {widgetUrl && (
         <div style={{
           position: 'absolute',
           top: 0,
@@ -208,21 +213,38 @@ export default function WidgetPage() {
             allow="microphone; camera"
             onError={(e) => {
               console.error('Widget iframe error:', e)
-              setServerAvailable(false)
-              setShowFallback(true)
+              // Show fallback only after delay to allow iframe to load
+              setTimeout(() => {
+                // Double-check if iframe actually failed
+                const iframe = e.currentTarget
+                try {
+                  // Try to access iframe - if it fails, show fallback
+                  if (!iframe.contentWindow) {
+                    setServerAvailable(false)
+                    setShowFallback(true)
+                  }
+                } catch {
+                  // CORS error is OK - iframe might still be loading
+                  console.log('CORS check (iframe may still be loading)')
+                }
+              }, 2000)
             }}
             onLoad={(e) => {
-              console.log('Widget iframe loaded successfully')
+              console.log('✅ Widget iframe loaded')
               setServerAvailable(true)
               setShowFallback(false)
             }}
             onLoadStart={() => {
-              // If iframe starts loading, hide fallback
+              // Hide fallback when iframe starts loading
               setShowFallback(false)
+              setServerAvailable(true)
             }}
           />
         </div>
-      ) : (
+      )}
+      
+      {/* Show fallback overlay only if iframe fails to load after timeout */}
+      {showFallback && widgetUrl && (
         // Fallback message overlay
         <div 
           style={{

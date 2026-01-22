@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { formatDate, formatTime } from '@/lib/utils'
 import { useRealtimeLeads } from '@/hooks/useRealtimeLeads'
 import CalendarView from './CalendarView'
+import { MdSync, MdCheckCircle, MdError } from 'react-icons/md'
 
 interface Booking {
   id: string
@@ -25,6 +26,12 @@ interface BookingsCalendarProps {
 export default function BookingsCalendar({ view = 'full' }: BookingsCalendarProps) {
   const { leads } = useRealtimeLeads()
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [syncing, setSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<{
+    success: boolean
+    message: string
+    details?: string
+  } | null>(null)
 
   useEffect(() => {
     const bookingsWithDates = leads.filter(
@@ -53,9 +60,94 @@ export default function BookingsCalendar({ view = 'full' }: BookingsCalendarProp
     }
   }, [leads, view])
 
+  const handleSyncCalendar = async () => {
+    setSyncing(true)
+    setSyncStatus(null)
+
+    try {
+      const response = await fetch('/api/calendar/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to sync calendar')
+      }
+
+      setSyncStatus({
+        success: true,
+        message: data.message || 'Calendar synced successfully',
+        details: data.errors && data.errors.length > 0
+          ? `${data.created} created, ${data.updated} updated. ${data.errors.length} errors occurred.`
+          : `${data.created} created, ${data.updated} updated.`,
+      })
+
+      // Refresh bookings after sync
+      setTimeout(() => {
+        window.location.reload()
+      }, 2000)
+    } catch (error: any) {
+      setSyncStatus({
+        success: false,
+        message: error.message || 'Failed to sync calendar',
+      })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   // Calendar view
   if (view === 'calendar' || view === 'full') {
-    return <CalendarView bookings={bookings} />
+    return (
+      <div className="space-y-4">
+        {/* Sync Button */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSyncCalendar}
+              disabled={syncing}
+              className={`
+                flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium
+                transition-colors
+                ${syncing
+                  ? 'bg-gray-400 cursor-not-allowed text-white'
+                  : 'bg-primary-600 hover:bg-primary-700 text-white'
+                }
+              `}
+            >
+              <MdSync className={syncing ? 'animate-spin' : ''} size={18} />
+              {syncing ? 'Syncing...' : 'Sync with Google Calendar'}
+            </button>
+            {syncStatus && (
+              <div
+                className={`
+                  flex items-center gap-2 px-3 py-1.5 rounded-md text-sm
+                  ${syncStatus.success
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
+                  }
+                `}
+              >
+                {syncStatus.success ? (
+                  <MdCheckCircle size={18} />
+                ) : (
+                  <MdError size={18} />
+                )}
+                <span>{syncStatus.message}</span>
+                {syncStatus.details && (
+                  <span className="text-xs opacity-75">({syncStatus.details})</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        <CalendarView bookings={bookings} />
+      </div>
+    )
   }
 
   // Upcoming list view
