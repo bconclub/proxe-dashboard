@@ -68,18 +68,18 @@
 .loadingBar {
   height: 100%;
   background: linear-gradient(90deg, 
-    #8B2FD9 0%, 
-    #FF6BFF 20%,
-    #A03BA8 40%, 
-    #FF6BFF 60%,
-    #8B2FD9 80%,
-    #FF6BFF 100%
+    #D4AF37 0%, 
+    #C9A961 20%,
+    #E8D5B7 40%, 
+    #C9A961 60%,
+    #D4AF37 80%,
+    #C9A961 100%
   );
   background-size: 200% 100%;
   box-shadow: 
-    0 0 20px rgba(255, 107, 255, 1),
-    0 0 40px rgba(160, 59, 168, 0.8),
-    0 0 60px rgba(139, 47, 217, 0.6),
+    0 0 20px rgba(212, 175, 55, 1),
+    0 0 40px rgba(201, 169, 97, 0.8),
+    0 0 60px rgba(212, 175, 55, 0.6),
     inset 0 0 10px rgba(255, 255, 255, 0.3);
   border-radius: 2px;
   transition: width 0.1s ease-out;
@@ -125,16 +125,16 @@
 @keyframes tubeGlow {
   0%, 100% {
     box-shadow: 
-      0 0 20px rgba(255, 107, 255, 1),
-      0 0 40px rgba(160, 59, 168, 0.8),
-      0 0 60px rgba(139, 47, 217, 0.6),
+      0 0 20px rgba(212, 175, 55, 1),
+      0 0 40px rgba(201, 169, 97, 0.8),
+      0 0 60px rgba(212, 175, 55, 0.6),
       inset 0 0 10px rgba(255, 255, 255, 0.3);
   }
   50% {
     box-shadow: 
-      0 0 30px rgba(255, 107, 255, 1.2),
-      0 0 60px rgba(160, 59, 168, 1),
-      0 0 90px rgba(139, 47, 217, 0.8),
+      0 0 30px rgba(212, 175, 55, 1.2),
+      0 0 60px rgba(201, 169, 97, 1),
+      0 0 90px rgba(212, 175, 55, 0.8),
       inset 0 0 15px rgba(255, 255, 255, 0.5);
   }
 }
@@ -176,5 +176,31 @@
   );
   background-size: 200% 100%;
   box-shadow: 0 0 10px rgba(212, 184, 138, 0.6);
+}
+
+/* Windchasers Aviation Gold Theme */
+[data-theme="aviation-gold"] .loadingBar,
+[data-brand="windchasers"] .loadingBar {
+  background: linear-gradient(90deg, 
+    #D4AF37 0%, 
+    #C9A961 20%,
+    #E8D5B7 40%, 
+    #C9A961 60%,
+    #D4AF37 80%,
+    #C9A961 100%
+  );
+  background-size: 200% 100%;
+  box-shadow: 
+    0 0 20px rgba(212, 175, 55, 1),
+    0 0 40px rgba(201, 169, 97, 0.8),
+    0 0 60px rgba(212, 175, 55, 0.6),
+    inset 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 768px) {
+  [data-theme="aviation-gold"] .loadingBar,
+  [data-brand="windchasers"] .loadingBar {
+    animation: loadingBarFlow 1s linear infinite, tubeGlow 1.5s ease-in-out infinite;
+  }
 }
 
