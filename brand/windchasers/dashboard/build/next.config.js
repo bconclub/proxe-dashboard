@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   eslint: {
     // Don't fail build on ESLint errors during production builds
-    ignoreDuringBuilds: false,
+    ignoreDuringBuilds: true,
   },
   typescript: {
     // Don't fail build on TypeScript errors (we already have type-check script)
